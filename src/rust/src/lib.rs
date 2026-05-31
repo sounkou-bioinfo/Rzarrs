@@ -1,16 +1,16 @@
 use savvy::savvy;
 use savvy::{
-    NullSexp, OwnedIntegerSexp, OwnedLogicalSexp, OwnedRealSexp, OwnedStringSexp,
-    RealSexp, IntegerSexp,
+    NullSexp, OwnedIntegerSexp, OwnedLogicalSexp, OwnedRealSexp, OwnedStringSexp, TypedSexp,
 };
-use savvy::NotAvailableValue;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use zarrs::array::Array;
+use zarrs::array::ArraySubset;
 use zarrs::filesystem::FilesystemStore;
-use zarrs::storage::ReadableStorage;
+use zarrs::storage::ReadableStorageTraits;
+use zarrs_http::HTTPStore;
 
 // ---------------------------------------------------------------------------
 // ZarrStore
@@ -22,6 +22,7 @@ use zarrs::storage::ReadableStorage;
 #[savvy]
 pub struct ZarrStore {
     inner: Arc<FilesystemStore>,
+    path: String,
 }
 
 /// @export
@@ -35,7 +36,10 @@ impl ZarrStore {
     fn open(path: &str) -> savvy::Result<Self> {
         let store = FilesystemStore::new(PathBuf::from(path))
             .map_err(|e| savvy::Error::new(&format!("cannot open store: {e}")))?;
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+            path: path.to_string(),
+        })
     }
 
     /// Path of the store root.
@@ -44,7 +48,49 @@ impl ZarrStore {
     /// @export
     fn path(&self) -> savvy::Result<savvy::Sexp> {
         let mut out = OwnedStringSexp::new(1)?;
-        out.set_elt(0, &self.inner.root().display().to_string())?;
+        out.set_elt(0, &self.path)?;
+        Ok(out.into())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ZarrHttpStore
+// ---------------------------------------------------------------------------
+
+/// A handle to a remote Zarr store accessed over HTTP/HTTPS.
+///
+/// @export
+#[savvy]
+pub struct ZarrHttpStore {
+    inner: Arc<HTTPStore>,
+    url: String,
+}
+
+/// @export
+#[savvy]
+impl ZarrHttpStore {
+    /// Open a remote Zarr store at the given HTTP/HTTPS URL.
+    ///
+    /// @param url Base URL of the `.zarr` store, e.g.
+    ///   `"https://example.com/my.zarr"`.
+    /// @returns A `ZarrHttpStore` object.
+    /// @export
+    fn open(url: &str) -> savvy::Result<Self> {
+        let store = HTTPStore::new(url)
+            .map_err(|e| savvy::Error::new(&format!("cannot open HTTP store: {e}")))?;
+        Ok(Self {
+            inner: Arc::new(store),
+            url: url.to_string(),
+        })
+    }
+
+    /// Base URL of the store.
+    ///
+    /// @returns A character scalar.
+    /// @export
+    fn url(&self) -> savvy::Result<savvy::Sexp> {
+        let mut out = OwnedStringSexp::new(1)?;
+        out.set_elt(0, &self.url)?;
         Ok(out.into())
     }
 }
@@ -58,7 +104,7 @@ impl ZarrStore {
 /// @export
 #[savvy]
 pub struct ZarrArray {
-    inner: Array<ReadableStorage>,
+    inner: Array<dyn ReadableStorageTraits>,
 }
 
 /// @export
@@ -67,11 +113,25 @@ impl ZarrArray {
     /// Open a Zarr array at the given path within a store.
     ///
     /// @param store A `ZarrStore` object.
-    /// @param path Array path within the store, e.g. `"/array"`.
+    /// @param path Array path within the store, e.g. `"/"`.
     /// @returns A `ZarrArray` object.
     /// @export
     fn open(store: &ZarrStore, path: &str) -> savvy::Result<Self> {
-        let array = Array::open(store.inner.clone(), path)
+        let storage: Arc<dyn ReadableStorageTraits> = store.inner.clone();
+        let array = Array::open(storage, path)
+            .map_err(|e| savvy::Error::new(&format!("cannot open array '{path}': {e}")))?;
+        Ok(Self { inner: array })
+    }
+
+    /// Open a Zarr array at the given path within an HTTP store.
+    ///
+    /// @param store A `ZarrHttpStore` object.
+    /// @param path Array path within the store, e.g. `"/"`.
+    /// @returns A `ZarrArray` object.
+    /// @export
+    fn open_http(store: &ZarrHttpStore, path: &str) -> savvy::Result<Self> {
+        let storage: Arc<dyn ReadableStorageTraits> = store.inner.clone();
+        let array = Array::open(storage, path)
             .map_err(|e| savvy::Error::new(&format!("cannot open array '{path}': {e}")))?;
         Ok(Self { inner: array })
     }
@@ -95,7 +155,11 @@ impl ZarrArray {
         let shape = self.inner.shape();
         let mut out = OwnedIntegerSexp::new(shape.len())?;
         for (i, &d) in shape.iter().enumerate() {
-            if d > i32::MAX as u64 { out.set_na(i)?; } else { out[i] = d as i32; }
+            if d > i32::MAX as u64 {
+                out.set_na(i)?;
+            } else {
+                out[i] = d as i32;
+            }
         }
         Ok(out.into())
     }
@@ -106,11 +170,16 @@ impl ZarrArray {
     /// @export
     fn chunk_shape(&self) -> savvy::Result<savvy::Sexp> {
         let ndim = self.inner.shape().len();
-        match self.inner.chunk_shape(&vec![0; ndim]) {
+        match self.inner.chunk_shape(&vec![0u64; ndim]) {
             Ok(shape) => {
                 let mut out = OwnedIntegerSexp::new(shape.len())?;
-                for (i, &d) in shape.iter().enumerate() {
-                    if d > i32::MAX as u64 { out.set_na(i)?; } else { out[i] = d as i32; }
+                for (i, d) in shape.iter().enumerate() {
+                    let v = d.get();
+                    if v > i32::MAX as u64 {
+                        out.set_na(i)?;
+                    } else {
+                        out[i] = v as i32;
+                    }
                 }
                 Ok(out.into())
             }
@@ -120,11 +189,13 @@ impl ZarrArray {
 
     /// Data type name.
     ///
-    /// @returns A character scalar, e.g. `"float32"`, `"int16"`, `"bool"`.
+    /// @returns A character scalar, e.g. `"float32"`, `"int32"`, `"bool"`.
     /// @export
     fn dtype(&self) -> savvy::Result<savvy::Sexp> {
+        let raw = self.inner.data_type().to_string();
+        let name = raw.split(" / ").next().unwrap_or(&raw);
         let mut out = OwnedStringSexp::new(1)?;
-        out.set_elt(0, &self.inner.data_type().to_string())?;
+        out.set_elt(0, name)?;
         Ok(out.into())
     }
 
@@ -164,14 +235,14 @@ impl ZarrArray {
     ///
     /// Zarr dtypes are mapped to R types as follows:
     ///
-    /// | Zarr dtype        | R type    | Notes                                       |
-    /// |-------------------|-----------|---------------------------------------------|
-    /// | float32 / float64 | `double`  | NaN -> `NA_real_`; Inf preserved            |
-    /// | int8 / int16 / int32 | `integer` | values equal to `NA_integer_` become `NA` |
-    /// | int64             | `double`  | precise to 2^53                             |
-    /// | uint8 / uint16    | `integer` | always fits                                 |
-    /// | uint32 / uint64   | `double`  | precise to 2^53 for uint64                  |
-    /// | bool              | `logical` |                                             |
+    /// | Zarr dtype           | R type    | Notes                               |
+    /// |----------------------|-----------|-------------------------------------|
+    /// | float32 / float64    | `double`  | NaN -> `NA_real_`; Inf preserved    |
+    /// | int8 / int16 / int32 | `integer` | `i32::MIN` -> `NA_integer_`         |
+    /// | int64                | `double`  | exact to 2^53                       |
+    /// | uint8 / uint16       | `integer` | always fits                         |
+    /// | uint32 / uint64      | `double`  |                                     |
+    /// | bool                 | `logical` |                                     |
     ///
     /// @param starts Integer or double vector of 0-based start indices (one per
     ///   dimension), or `NULL` to start from the origin.
@@ -179,15 +250,11 @@ impl ZarrArray {
     ///   per dimension), or `NULL` to use the full extent.
     /// @returns A vector of the appropriate R type with a `dim` attribute.
     /// @export
-    fn retrieve(
-        &self,
-        starts: savvy::Sexp,
-        ends: savvy::Sexp,
-    ) -> savvy::Result<savvy::Sexp> {
+    fn retrieve(&self, starts: savvy::Sexp, ends: savvy::Sexp) -> savvy::Result<savvy::Sexp> {
         let shape = self.inner.shape();
         let ndim = shape.len();
 
-        let subset: Vec<std::ops::Range<u64>> = if starts.is_null() {
+        let ranges: Vec<std::ops::Range<u64>> = if starts.is_null() {
             shape.iter().map(|&d| 0..d).collect()
         } else {
             let sv = coerce_to_f64(starts)?;
@@ -197,13 +264,14 @@ impl ZarrArray {
                     "starts and ends must each have length ndim ({ndim})"
                 )));
             }
-            (0..ndim).map(|i| sv[i] as u64 .. ev[i] as u64).collect()
+            (0..ndim).map(|i| sv[i] as u64..ev[i] as u64).collect()
         };
 
-        let dims: Vec<i32> = subset.iter()
-            .map(|r| (r.end - r.start) as i32)
-            .collect();
+        let dims: Vec<i32> = ranges.iter().map(|r| (r.end - r.start) as i32).collect();
+        let subset = ArraySubset::new_with_ranges(&ranges);
         let dtype = self.inner.data_type().to_string();
+        // DataType::Display emits "v3name / v2name" for V2 arrays; take the V3 name.
+        let dtype = dtype.split(" / ").next().unwrap_or(&dtype).to_string();
         let mut out = retrieve_typed(&self.inner, &subset, &dtype)?;
         out.set_dim(&dims)?;
         Ok(out)
@@ -215,79 +283,94 @@ impl ZarrArray {
 // ---------------------------------------------------------------------------
 
 fn coerce_to_f64(s: savvy::Sexp) -> savvy::Result<Vec<f64>> {
-    if let Ok(v) = s.as_typed::<IntegerSexp>() {
-        return Ok(v.iter().map(|&x| x as f64).collect());
+    match s.into_typed() {
+        TypedSexp::Integer(v) => Ok(v.iter().map(|&x| x as f64).collect()),
+        TypedSexp::Real(v) => Ok(v.iter().copied().collect()),
+        _ => Err(savvy::Error::new(
+            "starts/ends must be an integer or double vector",
+        )),
     }
-    if let Ok(v) = s.as_typed::<RealSexp>() {
-        return Ok(v.iter().copied().collect());
-    }
-    Err(savvy::Error::new("starts/ends must be an integer or double vector"))
 }
 
 fn retrieve_typed(
-    array: &Array<ReadableStorage>,
-    subset: &[std::ops::Range<u64>],
+    array: &Array<dyn ReadableStorageTraits>,
+    subset: &ArraySubset,
     dtype: &str,
 ) -> savvy::Result<savvy::Sexp> {
-    let n: usize = subset.iter().map(|r| (r.end - r.start) as usize).product();
+    let n: usize = subset.num_elements() as usize;
 
     match dtype {
         "float32" | "float64" => {
             let data: Vec<f64> = array
-                .retrieve_array_subset_elements::<f64>(subset)
+                .retrieve_array_subset::<Vec<f64>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
             let mut out = OwnedRealSexp::new(n)?;
             for (i, &v) in data.iter().enumerate() {
-                if v.is_nan() { out.set_na(i)?; } else { out[i] = v; }
+                if v.is_nan() {
+                    out.set_na(i)?;
+                } else {
+                    out[i] = v;
+                }
             }
             Ok(out.into())
         }
 
         "int8" | "int16" | "int32" => {
             let data: Vec<i32> = array
-                .retrieve_array_subset_elements::<i32>(subset)
+                .retrieve_array_subset::<Vec<i32>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
             let mut out = OwnedIntegerSexp::new(n)?;
             for (i, &v) in data.iter().enumerate() {
-                // R's NA_integer_ sentinel is i32::MIN
-                if v == i32::MIN { out.set_na(i)?; } else { out[i] = v; }
+                if v == i32::MIN {
+                    out.set_na(i)?;
+                } else {
+                    out[i] = v;
+                }
             }
             Ok(out.into())
         }
 
         "int64" => {
             let data: Vec<i64> = array
-                .retrieve_array_subset_elements::<i64>(subset)
+                .retrieve_array_subset::<Vec<i64>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
             let mut out = OwnedRealSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() { out[i] = v as f64; }
+            for (i, &v) in data.iter().enumerate() {
+                out[i] = v as f64;
+            }
             Ok(out.into())
         }
 
         "uint8" | "uint16" => {
             let data: Vec<u16> = array
-                .retrieve_array_subset_elements::<u16>(subset)
+                .retrieve_array_subset::<Vec<u16>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
             let mut out = OwnedIntegerSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() { out[i] = v as i32; }
+            for (i, &v) in data.iter().enumerate() {
+                out[i] = v as i32;
+            }
             Ok(out.into())
         }
 
         "uint32" | "uint64" => {
             let data: Vec<u64> = array
-                .retrieve_array_subset_elements::<u64>(subset)
+                .retrieve_array_subset::<Vec<u64>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
             let mut out = OwnedRealSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() { out[i] = v as f64; }
+            for (i, &v) in data.iter().enumerate() {
+                out[i] = v as f64;
+            }
             Ok(out.into())
         }
 
         "bool" => {
             let data: Vec<u8> = array
-                .retrieve_array_subset_elements::<u8>(subset)
+                .retrieve_array_subset::<Vec<u8>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
             let mut out = OwnedLogicalSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() { out[i] = v != 0; }
+            for (i, &v) in data.iter().enumerate() {
+                out.set_elt(i, v != 0)?;
+            }
             Ok(out.into())
         }
 

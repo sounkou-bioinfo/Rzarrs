@@ -4,7 +4,8 @@
 # Rzarrs
 
 R bindings to the [`zarrs`](https://github.com/zarrs/zarrs) Rust library
-for reading Zarr V3 (and compatible Zarr V2) stores from local disk.
+for reading Zarr V3 (and compatible Zarr V2) stores — from local disk or
+over HTTP/HTTPS.
 
 <!-- badges: start -->
 
@@ -15,15 +16,15 @@ badge](https://sounkou-bioinfo.r-universe.dev/Rzarrs/badges/version)](https://so
 
 ## Overview
 
-Rzarrs exposes two R6-style reference objects:
+Rzarrs exposes three R6-style reference objects:
 
-| Object      | Purpose                                                         |
-|-------------|-----------------------------------------------------------------|
-| `ZarrStore` | Handle to a local filesystem store (the `.zarr` root directory) |
-| `ZarrArray` | Handle to a single array within a store                         |
+| Object          | Purpose                         |
+|-----------------|---------------------------------|
+| `ZarrStore`     | Local filesystem store          |
+| `ZarrHttpStore` | Remote store over HTTP/HTTPS    |
+| `ZarrArray`     | A single array within any store |
 
-Array data is retrieved directly into R vectors with a `dim` attribute,
-with automatic dtype mapping:
+Zarr dtypes are mapped to R types automatically:
 
 | Zarr dtype                 | R type    | Notes                      |
 |----------------------------|-----------|----------------------------|
@@ -35,8 +36,7 @@ with automatic dtype mapping:
 | `bool`                     | `logical` |                            |
 
 SIMD-accelerated codec paths (gzip, zstd, blosc, crc32c) are selected
-automatically at runtime by the underlying Rust dependency crates — no
-build-time feature flags required.
+automatically at runtime by the underlying Rust dependency crates.
 
 ## Installation
 
@@ -52,32 +52,89 @@ install.packages(
 
 A Rust toolchain (cargo + rustc \>= 1.82) is required at install time.
 
-## Usage
+## Local store
 
 ``` r
 library(Rzarrs)
 
-# Open a store
-store <- ZarrStore$open("/path/to/my.zarr")
+# The package ships a tiny bundled fixture for illustration
+path <- system.file("testdata", "int32.zarr", package = "Rzarrs")
+
+store <- ZarrStore$open(path)
 store$path()
+#> [1] "/usr/local/lib/R/site-library/Rzarrs/testdata/int32.zarr"
 
-# Open an array
 arr <- ZarrArray$open(store, "/")
-arr$ndim()
-arr$shape()
-arr$chunk_shape()
 arr$dtype()
+#> [1] "int32"
+arr$shape()
+#> [1] 4 6
+arr$chunk_shape()
+#> [1] 2 3
 
-# Retrieve the full array
+# Retrieve the full array — returns an R integer vector with a dim attribute
 data <- arr$retrieve(NULL, NULL)
 dim(data)
+#> [1] 4 6
+data
+#>      [,1] [,2] [,3] [,4] [,5] [,6]
+#> [1,]    1   10    9   13   22   21
+#> [2,]    7    5   11   19   17   23
+#> [3,]    2    8    6   14   20   18
+#> [4,]    4    3   12   16   15   24
+```
 
-# Retrieve a subset (0-based, exclusive end)
-sub <- arr$retrieve(starts = c(0L, 0L, 0L), ends = c(10L, 10L, 5L))
+## Subsetting (0-based, exclusive end)
+
+``` r
+# First two rows, first three columns
+sub <- arr$retrieve(starts = c(0L, 0L), ends = c(2L, 3L))
 dim(sub)
+#> [1] 2 3
+sub
+#>      [,1] [,2] [,3]
+#> [1,]    1    2    3
+#> [2,]    7    8    9
+```
 
-# Inspect raw metadata
-cat(arr$metadata_json())
+## Array metadata
+
+``` r
+arr$ndim()
+#> [1] 2
+arr$dimension_names()   # NULL when absent
+#> NULL
+jsonlite::fromJSON(arr$metadata_json())$data_type
+#> [1] "int32"
+```
+
+## Remote store over HTTP/HTTPS
+
+Zarr V2 OME-Zarr microscopy data from the [Image Data
+Resource](https://idr.openmicroscopy.org/):
+
+``` r
+hs  <- ZarrHttpStore$open(
+  "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240.zarr"
+)
+hs$url()
+#> [1] "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240.zarr"
+
+img <- ZarrArray$open_http(hs, "/0")
+img$dtype()
+#> [1] "uint16"
+img$shape()   # t, c, z, y, x
+#> [1]   2 236 275 271
+
+# Fetch a small spatial patch: first time point, first channel, first Z slice
+patch <- img$retrieve(
+  starts = c(0L, 0L, 0L, 0L),
+  ends   = c(1L, 1L, 1L, 64L)
+)
+dim(patch)
+#> [1]  1  1  1 64
+range(patch)
+#> [1]  7 15
 ```
 
 ## License

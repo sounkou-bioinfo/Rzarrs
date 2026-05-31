@@ -70,6 +70,11 @@ SEXP savvy_ZarrArray_open__impl(SEXP c_arg__store, SEXP c_arg__path) {
     return handle_result(res);
 }
 
+SEXP savvy_ZarrArray_open_http__impl(SEXP c_arg__store, SEXP c_arg__path) {
+    SEXP res = savvy_ZarrArray_open_http__ffi(c_arg__store, c_arg__path);
+    return handle_result(res);
+}
+
 SEXP savvy_ZarrArray_retrieve__impl(SEXP self__, SEXP c_arg__starts, SEXP c_arg__ends) {
     SEXP res = savvy_ZarrArray_retrieve__ffi(self__, c_arg__starts, c_arg__ends);
     return handle_result(res);
@@ -77,6 +82,16 @@ SEXP savvy_ZarrArray_retrieve__impl(SEXP self__, SEXP c_arg__starts, SEXP c_arg_
 
 SEXP savvy_ZarrArray_shape__impl(SEXP self__) {
     SEXP res = savvy_ZarrArray_shape__ffi(self__);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrHttpStore_open__impl(SEXP c_arg__url) {
+    SEXP res = savvy_ZarrHttpStore_open__ffi(c_arg__url);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrHttpStore_url__impl(SEXP self__) {
+    SEXP res = savvy_ZarrHttpStore_url__ffi(self__);
     return handle_result(res);
 }
 
@@ -99,8 +114,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"savvy_ZarrArray_metadata_json__impl", (DL_FUNC) &savvy_ZarrArray_metadata_json__impl, 1},
     {"savvy_ZarrArray_ndim__impl", (DL_FUNC) &savvy_ZarrArray_ndim__impl, 1},
     {"savvy_ZarrArray_open__impl", (DL_FUNC) &savvy_ZarrArray_open__impl, 2},
+    {"savvy_ZarrArray_open_http__impl", (DL_FUNC) &savvy_ZarrArray_open_http__impl, 2},
     {"savvy_ZarrArray_retrieve__impl", (DL_FUNC) &savvy_ZarrArray_retrieve__impl, 3},
     {"savvy_ZarrArray_shape__impl", (DL_FUNC) &savvy_ZarrArray_shape__impl, 1},
+    {"savvy_ZarrHttpStore_open__impl", (DL_FUNC) &savvy_ZarrHttpStore_open__impl, 1},
+    {"savvy_ZarrHttpStore_url__impl", (DL_FUNC) &savvy_ZarrHttpStore_url__impl, 1},
     {"savvy_ZarrStore_open__impl", (DL_FUNC) &savvy_ZarrStore_open__impl, 1},
     {"savvy_ZarrStore_path__impl", (DL_FUNC) &savvy_ZarrStore_path__impl, 1},
     {NULL, NULL, 0}

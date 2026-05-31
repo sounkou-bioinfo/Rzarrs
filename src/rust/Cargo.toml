@@ -18,6 +18,7 @@ zarrs = { version = "0.23", default-features = false, features = [
     "transpose",
     "crc32c",
 ] }
+zarrs_http = "0.3"
 serde_json = "1"
 
 [profile.release]

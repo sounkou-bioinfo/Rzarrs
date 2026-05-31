@@ -110,12 +110,54 @@ NULL
   .savvy_wrap_ZarrArray(.Call(savvy_ZarrArray_open__impl, `store`, `path`))
 }
 
+`ZarrArray`$`open_http` <- function(`store`, `path`) {
+  `store` <- .savvy_extract_ptr(`store`, "Rzarrs::ZarrHttpStore")
+  .savvy_wrap_ZarrArray(.Call(savvy_ZarrArray_open_http__impl, `store`, `path`))
+}
+
 
 class(`ZarrArray`) <- c("Rzarrs::ZarrArray__bundle", "savvy_Rzarrs__sealed")
 
 #' @export
 `print.Rzarrs::ZarrArray__bundle` <- function(x, ...) {
   cat('Rzarrs::ZarrArray\n')
+}
+
+### wrapper functions for ZarrHttpStore
+
+`ZarrHttpStore_url` <- function(self) {
+  function() {
+    .Call(savvy_ZarrHttpStore_url__impl, `self`)
+  }
+}
+
+`.savvy_wrap_ZarrHttpStore` <- function(ptr) {
+  e <- new.env(parent = emptyenv())
+  e$.ptr <- ptr
+  e$`url` <- `ZarrHttpStore_url`(ptr)
+
+  class(e) <- c("Rzarrs::ZarrHttpStore", "ZarrHttpStore", "savvy_Rzarrs__sealed")
+  e
+}
+
+
+#' A handle to a remote Zarr store accessed over HTTP/HTTPS.
+#'
+#' @export
+`ZarrHttpStore` <- new.env(parent = emptyenv())
+
+### associated functions for ZarrHttpStore
+
+`ZarrHttpStore`$`open` <- function(`url`) {
+  .savvy_wrap_ZarrHttpStore(.Call(savvy_ZarrHttpStore_open__impl, `url`))
+}
+
+
+class(`ZarrHttpStore`) <- c("Rzarrs::ZarrHttpStore__bundle", "savvy_Rzarrs__sealed")
+
+#' @export
+`print.Rzarrs::ZarrHttpStore__bundle` <- function(x, ...) {
+  cat('Rzarrs::ZarrHttpStore\n')
 }
 
 ### wrapper functions for ZarrStore
