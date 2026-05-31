@@ -3,16 +3,16 @@
 
 # Rzarrs
 
-R bindings to the [`zarrs`](https://github.com/zarrs/zarrs) Rust library
-for reading Zarr V3 (and compatible Zarr V2) stores — from local disk or
-over HTTP/HTTPS.
-
 <!-- badges: start -->
 
 [![R-CMD-check](https://github.com/sounkou-bioinfo/Rzarrs/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/Rzarrs/actions/workflows/R-CMD-check.yaml)
 [![Rzarrs status
 badge](https://sounkou-bioinfo.r-universe.dev/Rzarrs/badges/version)](https://sounkou-bioinfo.r-universe.dev/Rzarrs)
 <!-- badges: end -->
+
+R bindings to the [`zarrs`](https://github.com/zarrs/zarrs) Rust library
+for reading Zarr V3 (and compatible Zarr V2) stores — from local disk or
+over HTTP/HTTPS.
 
 ## Overview
 
