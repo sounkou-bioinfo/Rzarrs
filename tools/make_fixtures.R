@@ -38,8 +38,11 @@ zarr3_array_meta <- function(shape, chunk_shape, dtype) {
 }
 
 # values for a chunk covering rows r0:(r0+nrows-1), cols c0:(c0+ncols-1)
-# row-major: value at (r,c) = r*6 + c + 1
-chunk_vals <- function(rows, cols) as.vector(outer(rows, cols, function(r, c) r * 6L + c + 1L))
+# C-order (row-major): t() then as.vector gives row-by-row layout.
+chunk_vals <- function(rows, cols) {
+  m <- outer(rows, cols, function(r, c) r * 6L + c + 1L)
+  as.vector(t(m))   # transpose before as.vector → row-major (C) order
+}
 
 make_fixture <- function(dir, dtype, write_chunk) {
   for (sub in c("c/0", "c/1")) dir.create(file.path(dir, sub), recursive = TRUE, showWarnings = FALSE)

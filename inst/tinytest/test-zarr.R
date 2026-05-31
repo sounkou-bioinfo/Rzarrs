@@ -57,10 +57,11 @@ expect_equal(full[4L, 6L], 24L)
 # ZarrArray — retrieve subset
 # ---------------------------------------------------------------------------
 
-sub <- arr$retrieve(c(0L, 0L), c(2L, 3L))
+# starts/ends are 1-based inclusive (R convention)
+sub <- arr$retrieve(c(1L, 1L), c(2L, 3L))
 expect_equal(dim(sub), c(2L, 3L))
 expect_true(is.integer(sub))
-expect_equal(as.vector(sub), c(1L, 2L, 3L, 7L, 8L, 9L))
+expect_equal(as.vector(sub), c(1L, 7L, 2L, 8L, 3L, 9L))
 
 # ---------------------------------------------------------------------------
 # float32 bundled fixture

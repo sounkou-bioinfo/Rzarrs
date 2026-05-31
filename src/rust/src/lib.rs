@@ -63,7 +63,11 @@ impl ZarrStore {
     /// @returns A `ZarrStore` object.
     /// @export
     fn open(path: &str) -> savvy::Result<Self> {
-        let store = FilesystemStore::new(PathBuf::from(path))
+        let pb = PathBuf::from(path);
+        if !pb.exists() {
+            return Err(savvy::Error::new(&format!("path does not exist: {path}")));
+        }
+        let store = FilesystemStore::new(pb)
             .map_err(|e| savvy::Error::new(&format!("cannot open store: {e}")))?;
         Ok(Self {
             inner: Arc::new(store),
@@ -372,13 +376,15 @@ impl ZarrArray {
         Ok(out.into())
     }
 
-    /// Retrieve array data as an R array (vector with a `dim` attribute).
+    /// Retrieve array data as a flat vector with a `dim` attribute (C order).
     ///
-    /// @param starts Integer or double vector of 0-based start indices (one per
-    ///   dimension), or `NULL` to start from the origin.
-    /// @param ends Integer or double vector of 0-based exclusive end indices (one
-    ///   per dimension), or `NULL` to use the full extent.
-    /// @returns A vector of the appropriate R type with a `dim` attribute.
+    /// This is the low-level internal function. R users should call the
+    /// high-level `$retrieve()` method defined in `R/array.R`, which accepts
+    /// 1-based inclusive indices and handles C-to-Fortran axis reordering.
+    ///
+    /// @param starts 0-based start indices (one per dimension), or `NULL`.
+    /// @param ends 0-based exclusive end indices (one per dimension), or `NULL`.
+    /// @returns A vector with a `dim` attribute in C order.
     /// @export
     fn retrieve(&self, starts: savvy::Sexp, ends: savvy::Sexp) -> savvy::Result<savvy::Sexp> {
         let shape = self.inner.shape();
@@ -429,7 +435,22 @@ fn retrieve_typed(
     let n: usize = subset.num_elements() as usize;
 
     match dtype {
-        "float32" | "float64" => {
+        "float32" => {
+            let data: Vec<f32> = array
+                .retrieve_array_subset::<Vec<f32>>(subset)
+                .map_err(|e| savvy::Error::new(&e.to_string()))?;
+            let mut out = OwnedRealSexp::new(n)?;
+            for (i, &v) in data.iter().enumerate() {
+                if v.is_nan() {
+                    out.set_na(i)?;
+                } else {
+                    out[i] = v as f64;
+                }
+            }
+            Ok(out.into())
+        }
+
+        "float64" => {
             let data: Vec<f64> = array
                 .retrieve_array_subset::<Vec<f64>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
@@ -444,7 +465,29 @@ fn retrieve_typed(
             Ok(out.into())
         }
 
-        "int8" | "int16" | "int32" => {
+        "int8" => {
+            let data: Vec<i8> = array
+                .retrieve_array_subset::<Vec<i8>>(subset)
+                .map_err(|e| savvy::Error::new(&e.to_string()))?;
+            let mut out = OwnedIntegerSexp::new(n)?;
+            for (i, &v) in data.iter().enumerate() {
+                out[i] = v as i32;
+            }
+            Ok(out.into())
+        }
+
+        "int16" => {
+            let data: Vec<i16> = array
+                .retrieve_array_subset::<Vec<i16>>(subset)
+                .map_err(|e| savvy::Error::new(&e.to_string()))?;
+            let mut out = OwnedIntegerSexp::new(n)?;
+            for (i, &v) in data.iter().enumerate() {
+                out[i] = v as i32;
+            }
+            Ok(out.into())
+        }
+
+        "int32" => {
             let data: Vec<i32> = array
                 .retrieve_array_subset::<Vec<i32>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
@@ -470,7 +513,18 @@ fn retrieve_typed(
             Ok(out.into())
         }
 
-        "uint8" | "uint16" => {
+        "uint8" => {
+            let data: Vec<u8> = array
+                .retrieve_array_subset::<Vec<u8>>(subset)
+                .map_err(|e| savvy::Error::new(&e.to_string()))?;
+            let mut out = OwnedIntegerSexp::new(n)?;
+            for (i, &v) in data.iter().enumerate() {
+                out[i] = v as i32;
+            }
+            Ok(out.into())
+        }
+
+        "uint16" => {
             let data: Vec<u16> = array
                 .retrieve_array_subset::<Vec<u16>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
@@ -481,7 +535,18 @@ fn retrieve_typed(
             Ok(out.into())
         }
 
-        "uint32" | "uint64" => {
+        "uint32" => {
+            let data: Vec<u32> = array
+                .retrieve_array_subset::<Vec<u32>>(subset)
+                .map_err(|e| savvy::Error::new(&e.to_string()))?;
+            let mut out = OwnedRealSexp::new(n)?;
+            for (i, &v) in data.iter().enumerate() {
+                out[i] = v as f64;
+            }
+            Ok(out.into())
+        }
+
+        "uint64" => {
             let data: Vec<u64> = array
                 .retrieve_array_subset::<Vec<u64>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
@@ -493,12 +558,12 @@ fn retrieve_typed(
         }
 
         "bool" => {
-            let data: Vec<u8> = array
-                .retrieve_array_subset::<Vec<u8>>(subset)
+            let data: Vec<bool> = array
+                .retrieve_array_subset::<Vec<bool>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
             let mut out = OwnedLogicalSexp::new(n)?;
             for (i, &v) in data.iter().enumerate() {
-                out.set_elt(i, v != 0)?;
+                out.set_elt(i, v)?;
             }
             Ok(out.into())
         }
