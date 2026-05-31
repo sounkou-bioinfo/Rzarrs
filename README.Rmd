@@ -99,7 +99,8 @@ sub
 ```{r meta}
 arr$ndim()
 arr$dimension_names()   # NULL when absent
-jsonlite::fromJSON(arr$metadata_json())$data_type
+arr$metadata()$data_type
+arr$metadata()$shape
 ```
 
 ## Remote store (HTTP/HTTPS or S3/GCS/Azure)

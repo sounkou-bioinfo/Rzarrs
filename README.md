@@ -107,8 +107,10 @@ arr$ndim()
 #> [1] 2
 arr$dimension_names()   # NULL when absent
 #> NULL
-jsonlite::fromJSON(arr$metadata_json())$data_type
+arr$metadata()$data_type
 #> [1] "int32"
+arr$metadata()$shape
+#> [1] 4 6
 ```
 
 ## Remote store (HTTP/HTTPS or S3/GCS/Azure)
