@@ -396,11 +396,7 @@ fn retrieve_typed(
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
             let mut out = OwnedRealSexp::new(n)?;
             for (i, &v) in data.iter().enumerate() {
-                if v.is_nan() {
-                    out.set_na(i)?;
-                } else {
-                    out[i] = v as f64;
-                }
+                out[i] = v as f64;
             }
             Ok(out.into())
         }
@@ -411,11 +407,7 @@ fn retrieve_typed(
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
             let mut out = OwnedRealSexp::new(n)?;
             for (i, &v) in data.iter().enumerate() {
-                if v.is_nan() {
-                    out.set_na(i)?;
-                } else {
-                    out[i] = v;
-                }
+                out[i] = v;
             }
             Ok(out.into())
         }

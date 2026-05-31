@@ -132,13 +132,17 @@ os   <- ZarrObjectStore$open(
 )
 oarr <- ZarrArray$open_object_store(os, "/0")
 oarr$dtype()
-oarr$shape()   # t, c, z, y, x
+#> [1] "uint16"
+oarr$shape()   # t, z, y, x  (4-D: 2 timepoints × 236 Z-slices × 275 × 271)
+#> [1]   2 236 275 271
 
-# Retrieve a small spatial patch: first time point, first channel, first Z,
-# first 8 pixels in Y — indices are 1-based inclusive
-patch <- oarr$retrieve(c(1L, 1L, 1L, 1L, 1L), c(1L, 1L, 1L, 8L, 8L))
+# Retrieve a small spatial patch: first time point, first Z-slice,
+# first 8×8 pixels in Y/X — indices are 1-based inclusive
+patch <- oarr$retrieve(c(1L, 1L, 1L, 1L), c(1L, 1L, 8L, 8L))
 dim(patch)
+#> [1] 1 1 8 8
 range(patch)
+#> [1]  8 28
 ```
 
 For private buckets it is the same call — just set the credentials
