@@ -19,3 +19,4 @@ BugReports: https://github.com/sounkou-bioinfo/Rzarrs/issues
 SystemRequirements: Cargo (Rust's package manager), rustc >= 1.82.0
 Suggests: tinytest, Rarr
 Encoding: UTF-8
+RoxygenNote: 7.3.3

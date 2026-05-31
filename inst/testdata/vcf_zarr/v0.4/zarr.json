@@ -1,0 +1,18 @@
+{
+  "zarr_format": 3,
+  "node_type": "group",
+  "attributes": {
+    "vcf_zarr_version": "0.4",
+    "vcf_meta_information": {
+      "fileformat": "VCFv4.3",
+      "FILTER": [
+        {"ID": "PASS",  "Description": "All filters passed"},
+        {"ID": "q30",   "Description": "Quality below 30"}
+      ],
+      "contig": [
+        {"ID": "chr1", "length": 1000},
+        {"ID": "chr2", "length": 500}
+      ]
+    }
+  }
+}

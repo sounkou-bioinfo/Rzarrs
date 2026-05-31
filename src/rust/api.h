@@ -10,6 +10,13 @@ SEXP savvy_ZarrArray_open_object_store__ffi(SEXP c_arg__store, SEXP c_arg__path)
 SEXP savvy_ZarrArray_retrieve__ffi(SEXP self__, SEXP c_arg__starts, SEXP c_arg__ends);
 SEXP savvy_ZarrArray_shape__ffi(SEXP self__);
 
+// methods and associated functions for ZarrGroup
+SEXP savvy_ZarrGroup_attributes__ffi(SEXP self__);
+SEXP savvy_ZarrGroup_attributes_json__ffi(SEXP self__);
+SEXP savvy_ZarrGroup_children__ffi(SEXP self__, SEXP c_arg__recursive);
+SEXP savvy_ZarrGroup_open__ffi(SEXP c_arg__store, SEXP c_arg__path);
+SEXP savvy_ZarrGroup_open_object_store__ffi(SEXP c_arg__store, SEXP c_arg__path);
+
 // methods and associated functions for ZarrObjectStore
 SEXP savvy_ZarrObjectStore_open__ffi(SEXP c_arg__url);
 SEXP savvy_ZarrObjectStore_url__ffi(SEXP self__);

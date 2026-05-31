@@ -1,0 +1,5 @@
+{
+  "zarr_format": 3,
+  "node_type": "group",
+  "attributes": {"vcf_zarr_version": "0.3"}
+}

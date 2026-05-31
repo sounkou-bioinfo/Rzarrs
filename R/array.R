@@ -29,6 +29,9 @@
       ## Set dim in reversed order then permute axes so R indexing is natural.
       dim(out) <- rev(d)
       out <- aperm(out, rev(seq_along(d)))
+    } else if (!is.null(d) && length(d) == 1L) {
+      ## Drop 1D dim so result is a plain vector (no array attribute)
+      dim(out) <- NULL
     }
 
     out

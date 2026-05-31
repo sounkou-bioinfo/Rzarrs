@@ -130,6 +130,67 @@ class(`ZarrArray`) <- c("Rzarrs::ZarrArray__bundle", "savvy_Rzarrs__sealed")
   cat('Rzarrs::ZarrArray\n')
 }
 
+### wrapper functions for ZarrGroup
+
+`ZarrGroup_attributes` <- function(self) {
+  function() {
+    .Call(savvy_ZarrGroup_attributes__impl, `self`)
+  }
+}
+
+`ZarrGroup_attributes_json` <- function(self) {
+  function() {
+    .Call(savvy_ZarrGroup_attributes_json__impl, `self`)
+  }
+}
+
+`ZarrGroup_children` <- function(self) {
+  function(`recursive`) {
+    .Call(savvy_ZarrGroup_children__impl, `self`, `recursive`)
+  }
+}
+
+`.savvy_wrap_ZarrGroup` <- function(ptr) {
+  e <- new.env(parent = emptyenv())
+  e$.ptr <- ptr
+  e$`attributes` <- `ZarrGroup_attributes`(ptr)
+  e$`attributes_json` <- `ZarrGroup_attributes_json`(ptr)
+  e$`children` <- `ZarrGroup_children`(ptr)
+
+  class(e) <- c("Rzarrs::ZarrGroup", "ZarrGroup", "savvy_Rzarrs__sealed")
+  e
+}
+
+
+#' A handle to a Zarr group (root or sub-group) within a store.
+#'
+#' Groups may contain arrays and/or sub-groups.  Use `$attributes()` to read
+#' the group's JSON attributes as a native R list, and `$children()` to list
+#' the immediate child nodes.
+#'
+#' @export
+`ZarrGroup` <- new.env(parent = emptyenv())
+
+### associated functions for ZarrGroup
+
+`ZarrGroup`$`open` <- function(`store`, `path`) {
+  `store` <- .savvy_extract_ptr(`store`, "Rzarrs::ZarrStore")
+  .savvy_wrap_ZarrGroup(.Call(savvy_ZarrGroup_open__impl, `store`, `path`))
+}
+
+`ZarrGroup`$`open_object_store` <- function(`store`, `path`) {
+  `store` <- .savvy_extract_ptr(`store`, "Rzarrs::ZarrObjectStore")
+  .savvy_wrap_ZarrGroup(.Call(savvy_ZarrGroup_open_object_store__impl, `store`, `path`))
+}
+
+
+class(`ZarrGroup`) <- c("Rzarrs::ZarrGroup__bundle", "savvy_Rzarrs__sealed")
+
+#' @export
+`print.Rzarrs::ZarrGroup__bundle` <- function(x, ...) {
+  cat('Rzarrs::ZarrGroup\n')
+}
+
 ### wrapper functions for ZarrObjectStore
 
 `ZarrObjectStore_url` <- function(self) {

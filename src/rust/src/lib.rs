@@ -10,11 +10,23 @@ use std::sync::Arc;
 use zarrs::array::Array;
 use zarrs::array::ArraySubset;
 use zarrs::filesystem::FilesystemStore;
+use zarrs::group::Group;
+use zarrs::node::NodeMetadata;
 use zarrs::storage::storage_adapter::async_to_sync::{
     AsyncToSyncBlockOn, AsyncToSyncStorageAdapter,
 };
-use zarrs::storage::ReadableStorageTraits;
+use zarrs::storage::{ListableStorageTraits, ReadableStorageTraits};
 use zarrs_object_store::AsyncObjectStore;
+
+// ---------------------------------------------------------------------------
+// Force-link codec plugins registered via `inventory`.
+// When zarrs is compiled as a staticlib these registrations are dropped by the
+// linker because nothing references them.  Touching each codec type ensures
+// its `inventory::submit!` global constructor survives into the final .so.
+// ---------------------------------------------------------------------------
+// Combined readable+listable trait object
+trait ReadListStorage: ReadableStorageTraits + ListableStorageTraits {}
+impl<T: ReadableStorageTraits + ListableStorageTraits> ReadListStorage for T {}
 
 // ---------------------------------------------------------------------------
 // Tokio block_on adapter
@@ -166,6 +178,110 @@ impl ZarrObjectStore {
     fn url(&self) -> savvy::Result<savvy::Sexp> {
         let mut out = OwnedStringSexp::new(1)?;
         out.set_elt(0, &self.url)?;
+        Ok(out.into())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ZarrGroup
+// ---------------------------------------------------------------------------
+
+/// A handle to a Zarr group (root or sub-group) within a store.
+///
+/// Groups may contain arrays and/or sub-groups.  Use `$attributes()` to read
+/// the group's JSON attributes as a native R list, and `$children()` to list
+/// the immediate child nodes.
+///
+/// @export
+#[savvy]
+pub struct ZarrGroup {
+    inner: Group<dyn ReadListStorage>,
+}
+
+/// @export
+#[savvy]
+impl ZarrGroup {
+    /// Open a group from a local filesystem store.
+    ///
+    /// @param store A `ZarrStore` object.
+    /// @param path Group path within the store, e.g. `"/"`.
+    /// @returns A `ZarrGroup` object.
+    /// @export
+    fn open(store: &ZarrStore, path: &str) -> savvy::Result<Self> {
+        let storage: Arc<dyn ReadListStorage> = store.inner.clone();
+        let group = Group::open(storage, path)
+            .map_err(|e| savvy::Error::new(&format!("cannot open group '{path}': {e}")))?;
+        Ok(Self { inner: group })
+    }
+
+    /// Open a group from an object-store backend (S3, GCS, Azure, HTTP/HTTPS…).
+    ///
+    /// @param store A `ZarrObjectStore` object.
+    /// @param path Group path within the store, e.g. `"/"`.
+    /// @returns A `ZarrGroup` object.
+    /// @export
+    fn open_object_store(store: &ZarrObjectStore, path: &str) -> savvy::Result<Self> {
+        let storage: Arc<dyn ReadListStorage> = store.storage.clone();
+        let group = Group::open(storage, path)
+            .map_err(|e| savvy::Error::new(&format!("cannot open group '{path}': {e}")))?;
+        Ok(Self { inner: group })
+    }
+
+    /// Group attributes as a native R list.
+    ///
+    /// @returns A named list (may be empty).
+    /// @export
+    fn attributes(&self) -> savvy::Result<savvy::Sexp> {
+        let map = self.inner.attributes();
+        let mut out = OwnedListSexp::new(map.len(), true)?;
+        for (i, (k, v)) in map.iter().enumerate() {
+            out.set_name_and_value(i, k, json_to_sexp(v)?)?;
+        }
+        Ok(out.into())
+    }
+
+    /// Group attributes as a raw JSON string.
+    ///
+    /// @returns A character scalar.
+    /// @export
+    fn attributes_json(&self) -> savvy::Result<savvy::Sexp> {
+        let json = serde_json::to_string_pretty(self.inner.attributes())
+            .map_err(|e| savvy::Error::new(&e.to_string()))?;
+        let mut out = OwnedStringSexp::new(1)?;
+        out.set_elt(0, &json)?;
+        Ok(out.into())
+    }
+
+    /// List child node paths and their types.
+    ///
+    /// Returns a data-frame-like named list with two character vectors:
+    /// `$path` (absolute path string) and `$kind` (`"array"` or `"group"`).
+    ///
+    /// @param recursive If `TRUE`, descend into sub-groups.
+    /// @returns A named list with elements `path` and `kind`.
+    /// @export
+    fn children(&self, recursive: bool) -> savvy::Result<savvy::Sexp> {
+        let nodes = self
+            .inner
+            .children(recursive)
+            .map_err(|e| savvy::Error::new(&format!("cannot list children: {e}")))?;
+
+        let n = nodes.len();
+        let mut paths = OwnedStringSexp::new(n)?;
+        let mut kinds = OwnedStringSexp::new(n)?;
+
+        for (i, node) in nodes.iter().enumerate() {
+            paths.set_elt(i, node.path().as_str())?;
+            let kind = match node.metadata() {
+                NodeMetadata::Array(_) => "array",
+                NodeMetadata::Group(_) => "group",
+            };
+            kinds.set_elt(i, kind)?;
+        }
+
+        let mut out = OwnedListSexp::new(2, true)?;
+        out.set_name_and_value(0, "path", paths)?;
+        out.set_name_and_value(1, "kind", kinds)?;
         Ok(out.into())
     }
 }
@@ -511,6 +627,17 @@ fn retrieve_typed(
             let mut out = OwnedLogicalSexp::new(n)?;
             for (i, &v) in data.iter().enumerate() {
                 out.set_elt(i, v)?;
+            }
+            Ok(out.into())
+        }
+
+        "string" => {
+            let data: Vec<String> = array
+                .retrieve_array_subset::<Vec<String>>(subset)
+                .map_err(|e| savvy::Error::new(&e.to_string()))?;
+            let mut out = OwnedStringSexp::new(n)?;
+            for (i, v) in data.iter().enumerate() {
+                out.set_elt(i, v.as_str())?;
             }
             Ok(out.into())
         }
