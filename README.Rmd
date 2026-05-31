@@ -1,0 +1,95 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# Rzarrs
+
+R bindings to the [`zarrs`](https://github.com/zarrs/zarrs) Rust library for
+reading Zarr V3 (and compatible Zarr V2) stores from local disk.
+
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/sounkou-bioinfo/Rzarrs/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/Rzarrs/actions/workflows/R-CMD-check.yaml)
+[![Rzarrs status badge](https://sounkou-bioinfo.r-universe.dev/Rzarrs/badges/version)](https://sounkou-bioinfo.r-universe.dev/Rzarrs)
+<!-- badges: end -->
+
+## Overview
+
+Rzarrs exposes two R6-style reference objects:
+
+| Object | Purpose |
+|---|---|
+| `ZarrStore` | Handle to a local filesystem store (the `.zarr` root directory) |
+| `ZarrArray` | Handle to a single array within a store |
+
+Array data is retrieved directly into R vectors with a `dim` attribute, with
+automatic dtype mapping:
+
+| Zarr dtype | R type | Notes |
+|---|---|---|
+| `float32` / `float64` | `double` | NaN → `NA_real_` |
+| `int8` / `int16` / `int32` | `integer` | `i32::MIN` → `NA_integer_` |
+| `int64` | `double` | exact to 2^53 |
+| `uint8` / `uint16` | `integer` | always fits |
+| `uint32` / `uint64` | `double` | |
+| `bool` | `logical` | |
+
+SIMD-accelerated codec paths (gzip, zstd, blosc, crc32c) are selected
+automatically at runtime by the underlying Rust dependency crates — no
+build-time feature flags required.
+
+## Installation
+
+```r
+install.packages(
+  "Rzarrs",
+  repos = c(
+    "https://sounkou-bioinfo.r-universe.dev",
+    "https://cloud.r-project.org"
+  )
+)
+```
+
+A Rust toolchain (cargo + rustc >= 1.82) is required at install time.
+
+## Usage
+
+```{r usage, eval = FALSE}
+library(Rzarrs)
+
+# Open a store
+store <- ZarrStore$open("/path/to/my.zarr")
+store$path()
+
+# Open an array
+arr <- ZarrArray$open(store, "/")
+arr$ndim()
+arr$shape()
+arr$chunk_shape()
+arr$dtype()
+
+# Retrieve the full array
+data <- arr$retrieve(NULL, NULL)
+dim(data)
+
+# Retrieve a subset (0-based, exclusive end)
+sub <- arr$retrieve(starts = c(0L, 0L, 0L), ends = c(10L, 10L, 5L))
+dim(sub)
+
+# Inspect raw metadata
+cat(arr$metadata_json())
+```
+
+## License
+
+GPL (>= 3)

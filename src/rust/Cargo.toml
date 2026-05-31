@@ -1,0 +1,26 @@
+[package]
+name = "rzarrs"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["staticlib", "lib"]
+
+[dependencies]
+savvy = "*"
+zarrs = { version = "0.23", default-features = false, features = [
+    "filesystem",
+    "ndarray",
+    "gzip",
+    "zstd",
+    "blosc",
+    "sharding",
+    "transpose",
+    "crc32c",
+] }
+serde_json = "1"
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1

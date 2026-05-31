@@ -1,0 +1,17 @@
+.Rproj.user
+.Rhistory
+.RData
+README.html
+src/*.o
+src/*.so
+src/*.dll
+src/*.a
+src/myrustlib/target/*
+src/myrustlib/vendor.tar.xz
+src/myrustlib/vendor/*
+inst/AUTHORS
+
+src/Makevars
+src/Makevars.win
+*.Rcheck/
+*.tar.gz
