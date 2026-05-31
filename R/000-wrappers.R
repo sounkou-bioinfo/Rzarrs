@@ -115,6 +115,11 @@ NULL
   .savvy_wrap_ZarrArray(.Call(savvy_ZarrArray_open_http__impl, `store`, `path`))
 }
 
+`ZarrArray`$`open_object_store` <- function(`store`, `path`) {
+  `store` <- .savvy_extract_ptr(`store`, "Rzarrs::ZarrObjectStore")
+  .savvy_wrap_ZarrArray(.Call(savvy_ZarrArray_open_object_store__impl, `store`, `path`))
+}
+
 
 class(`ZarrArray`) <- c("Rzarrs::ZarrArray__bundle", "savvy_Rzarrs__sealed")
 
@@ -158,6 +163,48 @@ class(`ZarrHttpStore`) <- c("Rzarrs::ZarrHttpStore__bundle", "savvy_Rzarrs__seal
 #' @export
 `print.Rzarrs::ZarrHttpStore__bundle` <- function(x, ...) {
   cat('Rzarrs::ZarrHttpStore\n')
+}
+
+### wrapper functions for ZarrObjectStore
+
+`ZarrObjectStore_url` <- function(self) {
+  function() {
+    .Call(savvy_ZarrObjectStore_url__impl, `self`)
+  }
+}
+
+`.savvy_wrap_ZarrObjectStore` <- function(ptr) {
+  e <- new.env(parent = emptyenv())
+  e$.ptr <- ptr
+  e$`url` <- `ZarrObjectStore_url`(ptr)
+
+  class(e) <- c("Rzarrs::ZarrObjectStore", "ZarrObjectStore", "savvy_Rzarrs__sealed")
+  e
+}
+
+
+#' A handle to an object-store Zarr backend (S3, GCS, Azure, …).
+#'
+#' Credentials are discovered from the standard environment variables for each
+#' provider — the same variables used by the AWS CLI, `gsutil`, `azcopy`, etc.
+#' No credentials need to be passed to R; set them in the process environment
+#' before calling `ZarrObjectStore$open()`.
+#'
+#' @export
+`ZarrObjectStore` <- new.env(parent = emptyenv())
+
+### associated functions for ZarrObjectStore
+
+`ZarrObjectStore`$`open` <- function(`url`) {
+  .savvy_wrap_ZarrObjectStore(.Call(savvy_ZarrObjectStore_open__impl, `url`))
+}
+
+
+class(`ZarrObjectStore`) <- c("Rzarrs::ZarrObjectStore__bundle", "savvy_Rzarrs__sealed")
+
+#' @export
+`print.Rzarrs::ZarrObjectStore__bundle` <- function(x, ...) {
+  cat('Rzarrs::ZarrObjectStore\n')
 }
 
 ### wrapper functions for ZarrStore

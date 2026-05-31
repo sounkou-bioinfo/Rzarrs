@@ -18,11 +18,12 @@ over HTTP/HTTPS.
 
 Rzarrs exposes three R6-style reference objects:
 
-| Object          | Purpose                         |
-|-----------------|---------------------------------|
-| `ZarrStore`     | Local filesystem store          |
-| `ZarrHttpStore` | Remote store over HTTP/HTTPS    |
-| `ZarrArray`     | A single array within any store |
+| Object            | Purpose                                                       |
+|-------------------|---------------------------------------------------------------|
+| `ZarrStore`       | Local filesystem store                                        |
+| `ZarrHttpStore`   | Remote store over plain HTTP/HTTPS (blocking reqwest)         |
+| `ZarrObjectStore` | S3, GCS, Azure Blob, or any `object_store`-compatible backend |
+| `ZarrArray`       | A single array within any store                               |
 
 Zarr dtypes are mapped to R types automatically:
 
@@ -135,6 +136,49 @@ dim(patch)
 #> [1]  1  1  1 64
 range(patch)
 #> [1]  7 15
+```
+
+## Object store (S3 / GCS / Azure / any `object_store` backend)
+
+`ZarrObjectStore` uses the
+[`object_store`](https://docs.rs/object_store) crate and dispatches on
+the URL scheme. Credentials are **never passed as R arguments** — set
+the standard provider environment variables in your R session before
+calling `open()`:
+
+| Provider     | Env vars                                                                                             |
+|--------------|------------------------------------------------------------------------------------------------------|
+| AWS S3       | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` (+ `AWS_ENDPOINT_URL` for MinIO / custom) |
+| Google Cloud | `GOOGLE_APPLICATION_CREDENTIALS` (or instance metadata)                                              |
+| Azure Blob   | `AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_ACCESS_KEY` or `AZURE_CLIENT_ID` + `AZURE_CLIENT_SECRET`     |
+
+``` r
+# Public HTTPS endpoint — no credentials needed
+os   <- ZarrObjectStore$open(
+  "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240.zarr"
+)
+oarr <- ZarrArray$open_object_store(os, "/0")
+oarr$dtype()
+#> [1] "uint16"
+oarr$shape()
+#> [1]   2 236 275 271
+
+# Retrieve a small patch
+patch <- oarr$retrieve(c(0L, 0L, 0L, 0L), c(1L, 1L, 1L, 8L))
+as.vector(patch)
+#> [1]  8  9  8 10  8 11  9  9
+```
+
+For private buckets it is the same call — just set the credentials
+first:
+
+``` r
+Sys.setenv(
+  AWS_ACCESS_KEY_ID     = "...",
+  AWS_SECRET_ACCESS_KEY = "...",
+  AWS_REGION            = "us-east-1"
+)
+os <- ZarrObjectStore$open("s3://my-bucket/path/to/array.zarr")
 ```
 
 ## License

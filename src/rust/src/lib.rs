@@ -9,11 +9,40 @@ use std::sync::Arc;
 use zarrs::array::Array;
 use zarrs::array::ArraySubset;
 use zarrs::filesystem::FilesystemStore;
+use zarrs::storage::storage_adapter::async_to_sync::{
+    AsyncToSyncBlockOn, AsyncToSyncStorageAdapter,
+};
 use zarrs::storage::ReadableStorageTraits;
 use zarrs_http::HTTPStore;
+use zarrs_object_store::AsyncObjectStore;
 
 // ---------------------------------------------------------------------------
-// ZarrStore
+// Tokio block_on adapter
+// ---------------------------------------------------------------------------
+
+struct TokioBlockOn(tokio::runtime::Handle);
+
+impl AsyncToSyncBlockOn for TokioBlockOn {
+    fn block_on<F: core::future::Future>(&self, future: F) -> F::Output {
+        self.0.block_on(future)
+    }
+}
+
+/// Build a one-shot tokio multi-thread runtime and return its handle.
+/// The runtime is intentionally leaked so the handle stays valid for the
+/// lifetime of the ZarrObjectStore / ZarrArray that holds it.
+fn make_tokio_handle() -> savvy::Result<tokio::runtime::Handle> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| savvy::Error::new(&format!("cannot build tokio runtime: {e}")))?;
+    let handle = rt.handle().clone();
+    std::mem::forget(rt); // keep the runtime alive
+    Ok(handle)
+}
+
+// ---------------------------------------------------------------------------
+// ZarrStore  (local filesystem)
 // ---------------------------------------------------------------------------
 
 /// A handle to a local Zarr filesystem store.
@@ -54,7 +83,7 @@ impl ZarrStore {
 }
 
 // ---------------------------------------------------------------------------
-// ZarrHttpStore
+// ZarrHttpStore  (plain HTTP/HTTPS via zarrs_http / reqwest blocking)
 // ---------------------------------------------------------------------------
 
 /// A handle to a remote Zarr store accessed over HTTP/HTTPS.
@@ -71,8 +100,8 @@ pub struct ZarrHttpStore {
 impl ZarrHttpStore {
     /// Open a remote Zarr store at the given HTTP/HTTPS URL.
     ///
-    /// @param url Base URL of the `.zarr` store, e.g.
-    ///   `"https://example.com/my.zarr"`.
+    /// @param url Base URL of the `.zarr` store,
+    ///   e.g. `"https://example.com/my.zarr"`.
     /// @returns A `ZarrHttpStore` object.
     /// @export
     fn open(url: &str) -> savvy::Result<Self> {
@@ -96,6 +125,90 @@ impl ZarrHttpStore {
 }
 
 // ---------------------------------------------------------------------------
+// ZarrObjectStore  (S3 / GCS / Azure / any object_store backend)
+//
+// Credentials are read from standard environment variables:
+//   S3    – AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_ENDPOINT_URL
+//   GCS   – GOOGLE_APPLICATION_CREDENTIALS  (or instance metadata)
+//   Azure – AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_ACCESS_KEY / AZURE_CLIENT_ID etc.
+//
+// URL schemes understood by object_store::parse_url_opts:
+//   s3://bucket/prefix   gs://bucket/prefix   az://container/prefix
+//   https://...          file:///path
+// ---------------------------------------------------------------------------
+
+/// A handle to an object-store Zarr backend (S3, GCS, Azure, …).
+///
+/// Credentials are discovered from the standard environment variables for each
+/// provider — the same variables used by the AWS CLI, `gsutil`, `azcopy`, etc.
+/// No credentials need to be passed to R; set them in the process environment
+/// before calling `ZarrObjectStore$open()`.
+///
+/// @export
+#[savvy]
+pub struct ZarrObjectStore {
+    storage: Arc<
+        AsyncToSyncStorageAdapter<
+            AsyncObjectStore<Box<dyn object_store::ObjectStore>>,
+            TokioBlockOn,
+        >,
+    >,
+    url: String,
+}
+
+/// @export
+#[savvy]
+impl ZarrObjectStore {
+    /// Open an object-store Zarr backend from a URL.
+    ///
+    /// Supported URL schemes: `s3://`, `gs://`, `az://`, `https://`,
+    /// `file:///`. Credentials are read from the process environment
+    /// automatically — set the standard provider env vars
+    /// (`AWS_ACCESS_KEY_ID` / `GOOGLE_APPLICATION_CREDENTIALS` /
+    /// `AZURE_STORAGE_ACCOUNT` etc.) before calling this function.
+    ///
+    /// @param url Store URL, e.g. `"s3://my-bucket/path/to/store.zarr"`.
+    /// @returns A `ZarrObjectStore` object.
+    /// @export
+    fn open(url: &str) -> savvy::Result<Self> {
+        let parsed = url::Url::parse(url)
+            .map_err(|e| savvy::Error::new(&format!("invalid URL '{url}': {e}")))?;
+        // Pass all process env vars — object_store builders pick up whichever
+        // ones are relevant for the selected backend (AWS_*, GOOGLE_*, AZURE_*…).
+        let (store, path) = object_store::parse_url_opts(&parsed, std::env::vars())
+            .map_err(|e| savvy::Error::new(&format!("cannot open object store: {e}")))?;
+        // Wrap with a prefix so array paths are resolved relative to the URL's
+        // path component rather than the storage root.
+        let store: Box<dyn object_store::ObjectStore> =
+            if path == object_store::path::Path::default() {
+                store
+            } else {
+                Box::new(object_store::prefix::PrefixStore::new(store, path))
+            };
+        let handle = make_tokio_handle()?;
+        let async_store = Arc::new(AsyncObjectStore::new(store));
+        let sync_store = Arc::new(AsyncToSyncStorageAdapter::new(
+            async_store,
+            TokioBlockOn(handle),
+        ));
+        Ok(Self {
+            storage: sync_store,
+            url: url.to_string(),
+        })
+    }
+
+    /// URL passed to `open()`.
+    ///
+    /// @returns A character scalar.
+    /// @export
+    fn url(&self) -> savvy::Result<savvy::Sexp> {
+        let mut out = OwnedStringSexp::new(1)?;
+        out.set_elt(0, &self.url)?;
+        Ok(out.into())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // ZarrArray
 // ---------------------------------------------------------------------------
 
@@ -107,10 +220,27 @@ pub struct ZarrArray {
     inner: Array<dyn ReadableStorageTraits>,
 }
 
+// Internal helper — open an array from an AsyncToSync-wrapped store.
+fn open_via_adapter<S, B>(
+    storage: Arc<AsyncToSyncStorageAdapter<S, B>>,
+    path: &str,
+) -> savvy::Result<ZarrArray>
+where
+    S: zarrs::storage::AsyncReadableStorageTraits
+        + zarrs::storage::AsyncListableStorageTraits
+        + 'static,
+    B: AsyncToSyncBlockOn + 'static,
+{
+    let storage: Arc<dyn ReadableStorageTraits> = storage;
+    let array = Array::open(storage, path)
+        .map_err(|e| savvy::Error::new(&format!("cannot open array '{path}': {e}")))?;
+    Ok(ZarrArray { inner: array })
+}
+
 /// @export
 #[savvy]
 impl ZarrArray {
-    /// Open a Zarr array at the given path within a store.
+    /// Open a Zarr array from a local filesystem store.
     ///
     /// @param store A `ZarrStore` object.
     /// @param path Array path within the store, e.g. `"/"`.
@@ -123,7 +253,7 @@ impl ZarrArray {
         Ok(Self { inner: array })
     }
 
-    /// Open a Zarr array at the given path within an HTTP store.
+    /// Open a Zarr array from an HTTP store.
     ///
     /// @param store A `ZarrHttpStore` object.
     /// @param path Array path within the store, e.g. `"/"`.
@@ -134,6 +264,16 @@ impl ZarrArray {
         let array = Array::open(storage, path)
             .map_err(|e| savvy::Error::new(&format!("cannot open array '{path}': {e}")))?;
         Ok(Self { inner: array })
+    }
+
+    /// Open a Zarr array from an object-store backend (S3, GCS, Azure, …).
+    ///
+    /// @param store A `ZarrObjectStore` object.
+    /// @param path Array path within the store, e.g. `"/"`.
+    /// @returns A `ZarrArray` object.
+    /// @export
+    fn open_object_store(store: &ZarrObjectStore, path: &str) -> savvy::Result<Self> {
+        open_via_adapter(store.storage.clone(), path)
     }
 
     /// Number of dimensions.
@@ -187,12 +327,13 @@ impl ZarrArray {
         }
     }
 
-    /// Data type name.
+    /// Data type name (V3 canonical form, e.g. `"float32"`, `"int32"`, `"bool"`).
     ///
-    /// @returns A character scalar, e.g. `"float32"`, `"int32"`, `"bool"`.
+    /// @returns A character scalar.
     /// @export
     fn dtype(&self) -> savvy::Result<savvy::Sexp> {
         let raw = self.inner.data_type().to_string();
+        // Display emits "v3name / v2name" for V2 arrays — keep only the V3 name.
         let name = raw.split(" / ").next().unwrap_or(&raw);
         let mut out = OwnedStringSexp::new(1)?;
         out.set_elt(0, name)?;
@@ -221,7 +362,7 @@ impl ZarrArray {
 
     /// Pretty-printed JSON array metadata.
     ///
-    /// @returns A character scalar containing the raw Zarr metadata JSON.
+    /// @returns A character scalar.
     /// @export
     fn metadata_json(&self) -> savvy::Result<savvy::Sexp> {
         let json = serde_json::to_string_pretty(self.inner.metadata())
@@ -232,17 +373,6 @@ impl ZarrArray {
     }
 
     /// Retrieve array data as an R array (vector with a `dim` attribute).
-    ///
-    /// Zarr dtypes are mapped to R types as follows:
-    ///
-    /// | Zarr dtype           | R type    | Notes                               |
-    /// |----------------------|-----------|-------------------------------------|
-    /// | float32 / float64    | `double`  | NaN -> `NA_real_`; Inf preserved    |
-    /// | int8 / int16 / int32 | `integer` | `i32::MIN` -> `NA_integer_`         |
-    /// | int64                | `double`  | exact to 2^53                       |
-    /// | uint8 / uint16       | `integer` | always fits                         |
-    /// | uint32 / uint64      | `double`  |                                     |
-    /// | bool                 | `logical` |                                     |
     ///
     /// @param starts Integer or double vector of 0-based start indices (one per
     ///   dimension), or `NULL` to start from the origin.
@@ -269,9 +399,8 @@ impl ZarrArray {
 
         let dims: Vec<i32> = ranges.iter().map(|r| (r.end - r.start) as i32).collect();
         let subset = ArraySubset::new_with_ranges(&ranges);
-        let dtype = self.inner.data_type().to_string();
-        // DataType::Display emits "v3name / v2name" for V2 arrays; take the V3 name.
-        let dtype = dtype.split(" / ").next().unwrap_or(&dtype).to_string();
+        let raw = self.inner.data_type().to_string();
+        let dtype = raw.split(" / ").next().unwrap_or(&raw).to_string();
         let mut out = retrieve_typed(&self.inner, &subset, &dtype)?;
         out.set_dim(&dims)?;
         Ok(out)

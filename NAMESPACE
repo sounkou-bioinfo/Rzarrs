@@ -2,4 +2,5 @@
 useDynLib(Rzarrs, .registration = TRUE)
 export(ZarrStore)
 export(ZarrHttpStore)
+export(ZarrObjectStore)
 export(ZarrArray)

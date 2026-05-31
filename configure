@@ -71,3 +71,17 @@ sed \
   -e "s/@FEATURE_FLAGS@/${FEATURE_FLAGS}/" \
   -e "s|@BEFORE_CARGO_BUILD@|${BEFORE_CARGO_BUILD}|" \
   src/Makevars.in > src/Makevars
+
+# Detect OpenSSL via pkg-config (needed for zarrs_http / reqwest TLS).
+# Fall back to bare -lssl -lcrypto if pkg-config is unavailable.
+OPENSSL_LIBS=""
+if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists openssl 2>/dev/null; then
+  OPENSSL_LIBS="$(pkg-config --libs openssl)"
+  echo "using OpenSSL: $(pkg-config --modversion openssl) (from pkg-config)"
+else
+  OPENSSL_LIBS="-lssl -lcrypto"
+  echo "using OpenSSL: fallback flags ${OPENSSL_LIBS}"
+fi
+
+# Append to PKG_LIBS in the generated Makevars
+sed -i "s|^PKG_LIBS = .*|& ${OPENSSL_LIBS}|" src/Makevars

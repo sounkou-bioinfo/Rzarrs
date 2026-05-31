@@ -10,6 +10,7 @@ crate-type = ["staticlib", "lib"]
 savvy = "*"
 zarrs = { version = "0.23", default-features = false, features = [
     "filesystem",
+    "async",
     "ndarray",
     "gzip",
     "zstd",
@@ -19,6 +20,10 @@ zarrs = { version = "0.23", default-features = false, features = [
     "crc32c",
 ] }
 zarrs_http = "0.3"
+zarrs_object_store = { version = "0.6", features = ["aws", "gcp", "azure", "http"] }
+object_store = { version = "0.13", default-features = false }
+url = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 serde_json = "1"
 
 [profile.release]
