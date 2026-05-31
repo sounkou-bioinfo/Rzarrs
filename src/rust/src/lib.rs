@@ -13,7 +13,6 @@ use zarrs::storage::storage_adapter::async_to_sync::{
     AsyncToSyncBlockOn, AsyncToSyncStorageAdapter,
 };
 use zarrs::storage::ReadableStorageTraits;
-use zarrs_http::HTTPStore;
 use zarrs_object_store::AsyncObjectStore;
 
 // ---------------------------------------------------------------------------
@@ -87,49 +86,7 @@ impl ZarrStore {
 }
 
 // ---------------------------------------------------------------------------
-// ZarrHttpStore  (plain HTTP/HTTPS via zarrs_http / reqwest blocking)
-// ---------------------------------------------------------------------------
-
-/// A handle to a remote Zarr store accessed over HTTP/HTTPS.
-///
-/// @export
-#[savvy]
-pub struct ZarrHttpStore {
-    inner: Arc<HTTPStore>,
-    url: String,
-}
-
-/// @export
-#[savvy]
-impl ZarrHttpStore {
-    /// Open a remote Zarr store at the given HTTP/HTTPS URL.
-    ///
-    /// @param url Base URL of the `.zarr` store,
-    ///   e.g. `"https://example.com/my.zarr"`.
-    /// @returns A `ZarrHttpStore` object.
-    /// @export
-    fn open(url: &str) -> savvy::Result<Self> {
-        let store = HTTPStore::new(url)
-            .map_err(|e| savvy::Error::new(&format!("cannot open HTTP store: {e}")))?;
-        Ok(Self {
-            inner: Arc::new(store),
-            url: url.to_string(),
-        })
-    }
-
-    /// Base URL of the store.
-    ///
-    /// @returns A character scalar.
-    /// @export
-    fn url(&self) -> savvy::Result<savvy::Sexp> {
-        let mut out = OwnedStringSexp::new(1)?;
-        out.set_elt(0, &self.url)?;
-        Ok(out.into())
-    }
-}
-
-// ---------------------------------------------------------------------------
-// ZarrObjectStore  (S3 / GCS / Azure / any object_store backend)
+// ZarrObjectStore  (S3 / GCS / Azure / HTTP/HTTPS via object_store)
 //
 // Credentials are read from standard environment variables:
 //   S3    – AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_ENDPOINT_URL
@@ -257,20 +214,7 @@ impl ZarrArray {
         Ok(Self { inner: array })
     }
 
-    /// Open a Zarr array from an HTTP store.
-    ///
-    /// @param store A `ZarrHttpStore` object.
-    /// @param path Array path within the store, e.g. `"/"`.
-    /// @returns A `ZarrArray` object.
-    /// @export
-    fn open_http(store: &ZarrHttpStore, path: &str) -> savvy::Result<Self> {
-        let storage: Arc<dyn ReadableStorageTraits> = store.inner.clone();
-        let array = Array::open(storage, path)
-            .map_err(|e| savvy::Error::new(&format!("cannot open array '{path}': {e}")))?;
-        Ok(Self { inner: array })
-    }
-
-    /// Open a Zarr array from an object-store backend (S3, GCS, Azure, …).
+    /// Open a Zarr array from an object-store backend (S3, GCS, Azure, HTTP/HTTPS…).
     ///
     /// @param store A `ZarrObjectStore` object.
     /// @param path Array path within the store, e.g. `"/"`.

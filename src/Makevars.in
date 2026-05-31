@@ -18,6 +18,10 @@ all: $(SHLIB) clean_intermediate
 $(SHLIB): $(STATLIB)
 
 $(STATLIB):
+	# Extract vendored Rust dependencies (created by `cargo vendor`).
+	if [ -f ./rust/vendor.tar.xz ]; then \
+	  tar xf ./rust/vendor.tar.xz -C ./rust; \
+	fi
 	# In some environments, ~/.cargo/bin might not be included in PATH, so we need
 	# to set it here to ensure cargo can be invoked. It is appended to PATH and
 	# therefore is only used if cargo is absent from the user's PATH.
