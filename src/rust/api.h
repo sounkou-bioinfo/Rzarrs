@@ -2,6 +2,7 @@
 SEXP savvy_ZarrArray_chunk_shape__ffi(SEXP self__);
 SEXP savvy_ZarrArray_dimension_names__ffi(SEXP self__);
 SEXP savvy_ZarrArray_dtype__ffi(SEXP self__);
+SEXP savvy_ZarrArray_metadata__ffi(SEXP self__);
 SEXP savvy_ZarrArray_metadata_json__ffi(SEXP self__);
 SEXP savvy_ZarrArray_ndim__ffi(SEXP self__);
 SEXP savvy_ZarrArray_open__ffi(SEXP c_arg__store, SEXP c_arg__path);

@@ -55,6 +55,11 @@ SEXP savvy_ZarrArray_dtype__impl(SEXP self__) {
     return handle_result(res);
 }
 
+SEXP savvy_ZarrArray_metadata__impl(SEXP self__) {
+    SEXP res = savvy_ZarrArray_metadata__ffi(self__);
+    return handle_result(res);
+}
+
 SEXP savvy_ZarrArray_metadata_json__impl(SEXP self__) {
     SEXP res = savvy_ZarrArray_metadata_json__ffi(self__);
     return handle_result(res);
@@ -111,6 +116,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"savvy_ZarrArray_chunk_shape__impl", (DL_FUNC) &savvy_ZarrArray_chunk_shape__impl, 1},
     {"savvy_ZarrArray_dimension_names__impl", (DL_FUNC) &savvy_ZarrArray_dimension_names__impl, 1},
     {"savvy_ZarrArray_dtype__impl", (DL_FUNC) &savvy_ZarrArray_dtype__impl, 1},
+    {"savvy_ZarrArray_metadata__impl", (DL_FUNC) &savvy_ZarrArray_metadata__impl, 1},
     {"savvy_ZarrArray_metadata_json__impl", (DL_FUNC) &savvy_ZarrArray_metadata_json__impl, 1},
     {"savvy_ZarrArray_ndim__impl", (DL_FUNC) &savvy_ZarrArray_ndim__impl, 1},
     {"savvy_ZarrArray_open__impl", (DL_FUNC) &savvy_ZarrArray_open__impl, 2},

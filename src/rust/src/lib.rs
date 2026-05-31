@@ -1,6 +1,7 @@
 use savvy::savvy;
 use savvy::{
-    NullSexp, OwnedIntegerSexp, OwnedLogicalSexp, OwnedRealSexp, OwnedStringSexp, TypedSexp,
+    NullSexp, OwnedIntegerSexp, OwnedListSexp, OwnedLogicalSexp, OwnedRealSexp, OwnedStringSexp,
+    TypedSexp,
 };
 
 use std::path::PathBuf;
@@ -320,6 +321,16 @@ impl ZarrArray {
         Ok(out.into())
     }
 
+    /// Array metadata as a native R list (no external JSON package required).
+    ///
+    /// @returns A named list mirroring the Zarr array metadata.
+    /// @export
+    fn metadata(&self) -> savvy::Result<savvy::Sexp> {
+        let v = serde_json::to_value(self.inner.metadata())
+            .map_err(|e| savvy::Error::new(&e.to_string()))?;
+        json_to_sexp(&v)
+    }
+
     /// Retrieve array data as a flat vector with a `dim` attribute (C order).
     ///
     /// This is the low-level internal function. R users should call the
@@ -515,5 +526,73 @@ fn retrieve_typed(
         other => Err(savvy::Error::new(&format!(
             "dtype '{other}' is not yet supported by Rzarrs"
         ))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// JSON → R (serde_json::Value → savvy::Sexp) — no R-side JSON dep needed
+// ---------------------------------------------------------------------------
+
+fn json_to_sexp(v: &serde_json::Value) -> savvy::Result<savvy::Sexp> {
+    use serde_json::Value;
+    match v {
+        Value::Null => Ok(NullSexp.into()),
+
+        Value::Bool(b) => {
+            let mut out = OwnedLogicalSexp::new(1)?;
+            out.set_elt(0, *b)?;
+            Ok(out.into())
+        }
+
+        Value::Number(n) => {
+            let mut out = OwnedRealSexp::new(1)?;
+            out[0] = n.as_f64().unwrap_or(f64::NAN);
+            Ok(out.into())
+        }
+
+        Value::String(s) => {
+            let mut out = OwnedStringSexp::new(1)?;
+            out.set_elt(0, s)?;
+            Ok(out.into())
+        }
+
+        Value::Array(arr) => {
+            // Homogeneous scalar arrays → atomic R vectors for convenience.
+            if arr.iter().all(|x| x.is_f64() || x.is_i64() || x.is_u64()) && !arr.is_empty() {
+                let mut out = OwnedRealSexp::new(arr.len())?;
+                for (i, x) in arr.iter().enumerate() {
+                    out[i] = x.as_f64().unwrap_or(f64::NAN);
+                }
+                return Ok(out.into());
+            }
+            if arr.iter().all(|x| x.is_string()) && !arr.is_empty() {
+                let mut out = OwnedStringSexp::new(arr.len())?;
+                for (i, x) in arr.iter().enumerate() {
+                    out.set_elt(i, x.as_str().unwrap_or(""))?;
+                }
+                return Ok(out.into());
+            }
+            if arr.iter().all(|x| x.is_boolean()) && !arr.is_empty() {
+                let mut out = OwnedLogicalSexp::new(arr.len())?;
+                for (i, x) in arr.iter().enumerate() {
+                    out.set_elt(i, x.as_bool().unwrap_or(false))?;
+                }
+                return Ok(out.into());
+            }
+            // Mixed / nested → unnamed list
+            let mut out = OwnedListSexp::new(arr.len(), false)?;
+            for (i, x) in arr.iter().enumerate() {
+                out.set_value(i, json_to_sexp(x)?)?;
+            }
+            Ok(out.into())
+        }
+
+        Value::Object(map) => {
+            let mut out = OwnedListSexp::new(map.len(), true)?;
+            for (i, (k, val)) in map.iter().enumerate() {
+                out.set_name_and_value(i, k, json_to_sexp(val)?)?;
+            }
+            Ok(out.into())
+        }
     }
 }

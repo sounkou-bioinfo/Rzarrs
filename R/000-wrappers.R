@@ -58,6 +58,12 @@ NULL
   }
 }
 
+`ZarrArray_metadata` <- function(self) {
+  function() {
+    .Call(savvy_ZarrArray_metadata__impl, `self`)
+  }
+}
+
 `ZarrArray_metadata_json` <- function(self) {
   function() {
     .Call(savvy_ZarrArray_metadata_json__impl, `self`)
@@ -88,6 +94,7 @@ NULL
   e$`chunk_shape` <- `ZarrArray_chunk_shape`(ptr)
   e$`dimension_names` <- `ZarrArray_dimension_names`(ptr)
   e$`dtype` <- `ZarrArray_dtype`(ptr)
+  e$`metadata` <- `ZarrArray_metadata`(ptr)
   e$`metadata_json` <- `ZarrArray_metadata_json`(ptr)
   e$`ndim` <- `ZarrArray_ndim`(ptr)
   e$`retrieve` <- `ZarrArray_retrieve`(ptr)
