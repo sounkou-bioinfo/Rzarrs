@@ -22,6 +22,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore script executable bits
+        run: chmod +x configure cleanup configure.win cleanup.win
+
       - name: Install OS dependencies
         run: |
           dnf install -y --setopt=install_weak_deps=False \
