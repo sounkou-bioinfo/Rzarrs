@@ -309,12 +309,6 @@ zv_zip$genotypes(variants = 1:2, samples = 1:2)
 #> [2,]    1    1
 ```
 
-`.zarr.zip` support in this package is backed by `zarrs_zip` and does not
-extract the archive into memory or temporary files. `ZarrVcf$open()` reads
-entries lazily from the zip payload through `zarrs_zip` before opening the
-Zarr hierarchy. This makes local `.zarr.zip` archives practical both for
-fixtures and larger production archives. Object-store-backed paths (S3, GCS,
-Azure, HTTPS, etc.) remain available through `ZarrObjectStore`.
 
 ## License
 

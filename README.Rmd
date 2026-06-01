@@ -237,11 +237,6 @@ zv_zip$version()
 zv_zip$genotypes(variants = 1:2, samples = 1:2)
 ```
 
-`.zarr.zip` support now uses `zarrs_zip` in this package as the storage
-adapter, so no extraction step is performed in Rust/R: compressed entries are
-read lazily via the zip reader in `zarrs`. This is suitable for both local
-fixtures and production archives. Object-store-backed zarrs (S3, GCS, Azure,
-HTTPS, etc.) remain available through the existing `ZarrObjectStore` path.
 
 ## License
 
