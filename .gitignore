@@ -9,8 +9,6 @@ src/*.a
 src/myrustlib/target/*
 src/myrustlib/vendor.tar.xz
 src/myrustlib/vendor/*
-inst/AUTHORS
-
 src/Makevars
 src/Makevars.win
 *.Rcheck/

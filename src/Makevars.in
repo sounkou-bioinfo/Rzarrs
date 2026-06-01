@@ -11,7 +11,8 @@ LIBDIR = $(TARGET_DIR)/$(TARGET)/$(subst dev,debug,$(PROFILE))
 STATLIB = $(LIBDIR)/librzarrs.a
 PKG_LIBS = -L$(LIBDIR) -lrzarrs
 
-CARGO_BUILD_ARGS = --lib --profile $(PROFILE) $(FEATURE_FLAGS) --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR)
+CARGO_VENDOR_ARGS = --config source.crates-io.replace-with=\"vendored-sources\" --config source.vendored-sources.directory=\"./rust/vendor\"
+CARGO_BUILD_ARGS = --lib --profile $(PROFILE) $(FEATURE_FLAGS) --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR) $(CARGO_VENDOR_ARGS)
 
 all: $(SHLIB) clean_intermediate
 

@@ -40,7 +40,7 @@ jobs:
           mkdir -p /root/R-libs
           echo "R_LIBS_USER=/root/R-libs" >> ~/.Renviron
           R -q -e '
-            pkgs <- c("bench", "jsonlite", "tinytest")
+            pkgs <- c("tinytest")
             need <- setdiff(pkgs,
               rownames(installed.packages(lib.loc = "/root/R-libs")))
             if (length(need)) install.packages(need, lib = "/root/R-libs",
@@ -55,7 +55,7 @@ jobs:
       - name: R CMD check --as-cran
         run: |
           echo "R_LIBS_USER=/root/R-libs" >> ~/.Renviron
-          PKG=$(ls -t hellorust.multiversion_*.tar.gz | head -n1)
+          PKG=$(ls -t Rzarrs_*.tar.gz | head -n1)
           R CMD check --as-cran --no-manual "$PKG"
 
       - name: Upload check artifacts on failure
@@ -64,6 +64,6 @@ jobs:
         with:
           name: fedora-cran-check-results
           path: |
-            hellorust.multiversion.Rcheck/
+            Rzarrs.Rcheck/
             config.log
           if-no-files-found: ignore

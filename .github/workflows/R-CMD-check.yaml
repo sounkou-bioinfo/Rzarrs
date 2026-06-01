@@ -37,7 +37,7 @@ jobs:
         if: ${{ runner.os == 'windows' && runner.arch == 'ARM64' }}
         run: rustup target add aarch64-pc-windows-gnullvm
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: r-lib/actions/setup-pandoc@v2
 

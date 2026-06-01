@@ -1,0 +1,18 @@
+Rzarrs includes Rust dependencies vendored for reproducible source builds.
+
+The Rust dependency source archive at src/rust/vendor.tar.xz is generated from
+src/rust/Cargo.lock with `cargo vendor`. Copyright and license files for each
+vendored crate are preserved inside that archive. The package Authors@R records
+"Authors of the dependency Rust crates" as copyright holders for these bundled
+third-party sources.
+
+Major upstream projects used by the Rust implementation include:
+
+- zarrs and related zarrs_* crates: https://github.com/zarrs/zarrs
+- zarrs_object_store / object_store integration: https://github.com/apache/arrow-rs
+- savvy: https://github.com/yutannihilation/savvy
+- tokio: https://tokio.rs/
+- serde / serde_json: https://serde.rs/
+- flate2: https://github.com/rust-lang/flate2-rs
+
+See src/rust/Cargo.lock for exact crate names and versions.
