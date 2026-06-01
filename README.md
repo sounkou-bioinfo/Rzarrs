@@ -42,7 +42,7 @@ Zarr dtypes are mapped to R types automatically:
 Indices are **1-based and inclusive** on both ends — the same convention
 as all other R array operations.
 
-SIMD-accelerated codec paths (gzip, zstd, blosc, crc32c) are selected
+SIMD-accelerated codec paths (gzip, zstd, crc32c) are selected
 automatically at runtime by the underlying Rust dependency crates.
 
 ## Installation
@@ -309,14 +309,12 @@ zv_zip$genotypes(variants = 1:2, samples = 1:2)
 #> [2,]    1    1
 ```
 
-Current ZIP support is intentionally reader-first and local-file
-oriented: the archive is loaded into a Rust memory store before opening
-the Zarr hierarchy. That is useful for small VCF fixtures and portable
-examples. Large production VCF Zarr archives should be stored as normal
-directory/object-store Zarr, or the backend should be switched to
-upstream `zarrs_zip` once it is vendored for this package. `zarrs_zip`
-is the right long-term target because it can provide a real Zarr storage
-adapter instead of R-level or ad hoc extraction.
+`.zarr.zip` support in this package is backed by `zarrs_zip` and does not
+extract the archive into memory or temporary files. `ZarrVcf$open()` reads
+entries lazily from the zip payload through `zarrs_zip` before opening the
+Zarr hierarchy. This makes local `.zarr.zip` archives practical both for
+fixtures and larger production archives. Object-store-backed paths (S3, GCS,
+Azure, HTTPS, etc.) remain available through `ZarrObjectStore`.
 
 ## License
 

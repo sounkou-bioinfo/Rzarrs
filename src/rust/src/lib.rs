@@ -1,7 +1,5 @@
 mod nested;
 mod vcf_schema;
-#[cfg(feature = "zip")]
-mod zip_extract;
 
 #[cfg(feature = "async-altrep")]
 mod altrep_async;
@@ -1053,18 +1051,25 @@ fn c_to_r_order<T: Clone>(data: &[T], dims: &[i32]) -> Vec<T> {
 
 #[cfg(feature = "zip")]
 fn open_local_zip_store(path: &str) -> savvy::Result<Arc<dyn ReadListStorage>> {
-    let entries = zip_extract::read_zip_entries(path)
-        .map_err(|e| savvy::Error::new(&format!("cannot read zip '{path}': {e}")))?;
-    let mem_store = zarrs::storage::store::MemoryStore::new();
-    for (name, data) in &entries {
-        let key = zarrs::storage::StoreKey::new(name.as_str())
-            .map_err(|e| savvy::Error::new(&format!("invalid store key '{name}': {e}")))?;
-        use zarrs::storage::WritableStorageTraits;
-        mem_store
-            .set(&key, zarrs::storage::Bytes::copy_from_slice(data))
-            .map_err(|e| savvy::Error::new(&format!("cannot set key '{name}': {e}")))?;
-    }
-    Ok(Arc::new(mem_store))
+    let path = std::path::Path::new(path);
+    let key = path
+        .file_name()
+        .and_then(|x| x.to_str())
+        .ok_or_else(|| savvy::Error::new("invalid .zarr.zip path"))?;
+
+    let root = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let fs_root = zarrs::filesystem::FilesystemStore::new(root).map_err(|e| {
+        savvy::Error::new(&format!(
+            "cannot open filesystem root for zip '{path:?}': {e}"
+        ))
+    })?;
+    let storage_key = zarrs::storage::StoreKey::try_from(key)
+        .map_err(|e| savvy::Error::new(&format!("invalid zip store key '{key}': {e}")))?;
+
+    let zip_store = zarrs_zip::ZipStorageAdapter::new(Arc::new(fs_root), storage_key)
+        .map_err(|e| savvy::Error::new(&format!("cannot open zip store '{key}': {e}")))?;
+
+    Ok(Arc::new(zip_store))
 }
 
 #[cfg(not(feature = "zip"))]
@@ -1079,8 +1084,9 @@ fn open_local_zip_store(_path: &str) -> savvy::Result<Arc<dyn ReadListStorage>> 
 impl ZarrVcf {
     /// Open a VCF Zarr store from a local path or URL.
     ///
-    /// Automatically detects `.zip` files (extracted to a temp directory)
-    /// and URL schemes (`http://`, `s3://`, `gs://`, `az://`, `file://`).
+    /// Automatically detects `.zip` files and reads them via the
+    /// `zarrs_zip` adapter directly, and URL schemes (`http://`, `s3://`,
+    /// `gs://`, `az://`, `file://`).
     ///
     /// @param path Path to a `.zarr` directory, a `.zip` file, or a URL.
     /// @returns A `ZarrVcf` object.
