@@ -12,19 +12,20 @@ badge](https://sounkou-bioinfo.r-universe.dev/Rzarrs/badges/version)](https://so
 
 R bindings to the [`zarrs`](https://github.com/zarrs/zarrs) Rust library
 for reading Zarr V3 (and compatible Zarr V2) stores. The current package
-is reader-first: local filesystems, HTTP/HTTPS, S3, GCS, and Azure Blob
-object stores are supported by default.
+is reader-first: local filesystems, HTTP/HTTPS, S3, and local
+`.zarr.zip` VCF archives are supported by default. GCS and Azure Blob
+can be enabled when installing from source.
 
 ## Overview
 
 Rzarrs exposes four savvy-backed reference objects:
 
-| Object            | Purpose                                                              |
-|-------------------|----------------------------------------------------------------------|
-| `ZarrStore`       | Local filesystem store                                               |
-| `ZarrObjectStore` | HTTP/HTTPS, S3, GCS, Azure Blob, or any supported `object_store` URL |
-| `ZarrGroup`       | A group node within a store (attributes + child listing)             |
-| `ZarrArray`       | A single array within any store                                      |
+| Object            | Purpose                                                                          |
+|-------------------|----------------------------------------------------------------------------------|
+| `ZarrStore`       | Local filesystem store                                                           |
+| `ZarrObjectStore` | HTTP/HTTPS and S3 by default; GCS/Azure Blob when enabled at source-install time |
+| `ZarrGroup`       | A group node within a store (attributes + child listing)                         |
+| `ZarrArray`       | A single array within any store                                                  |
 
 Zarr dtypes are mapped to R types automatically:
 
@@ -58,6 +59,39 @@ install.packages(
 
 A Rust toolchain (cargo + rustc \>= 1.82) and GNU Make are required at
 install time.
+
+Default Rust features are `aws` and `zip`: HTTP/HTTPS, S3, and local
+`.zarr.zip` VCF Zarr archives work out of the box. Source installs can
+enable more providers with configure arguments:
+
+``` r
+# Enable GCS in addition to defaults
+install.packages(
+  "Rzarrs",
+  repos = c("https://sounkou-bioinfo.r-universe.dev", "https://cloud.r-project.org"),
+  configure.args = "--enable-gcp"
+)
+
+# Enable all cloud providers: AWS, GCS, and Azure Blob
+install.packages(
+  "Rzarrs",
+  repos = c("https://sounkou-bioinfo.r-universe.dev", "https://cloud.r-project.org"),
+  configure.args = "--enable-all-cloud"
+)
+
+# Exact Cargo feature control; comma or space separated features are accepted
+install.packages(
+  "Rzarrs",
+  type = "source",
+  configure.args = "--without-default-rust-features --with-rust-features=aws,gcp,azure,zip"
+)
+```
+
+Equivalent environment-variable control is also supported:
+
+``` sh
+SAVVY_FEATURES="aws gcp azure zip" R CMD INSTALL Rzarrs_0.1.0.tar.gz
+```
 
 ## Local store
 
@@ -117,12 +151,13 @@ arr$metadata()$shape
 #> [1] 4 6
 ```
 
-## Remote store (HTTP/HTTPS, S3, GCS, Azure)
+## Remote store (HTTP/HTTPS, S3; optional GCS/Azure)
 
 `ZarrObjectStore` uses the Rust object-store integration underneath and
 dispatches on the URL scheme. Public `https://` URLs need no
-credentials. For private cloud buckets, set the standard provider
-environment variables before calling `open()`:
+credentials. S3 is enabled by default. GCS and Azure Blob require the
+source-install features shown above. For private cloud buckets, set the
+standard provider environment variables before calling `open()`:
 
 | Provider     | Env vars                                                                                                       |
 |--------------|----------------------------------------------------------------------------------------------------------------|
@@ -150,16 +185,27 @@ range(patch)
 #> [1]  8 28
 ```
 
-For private buckets it is the same call — just set the credentials
-first:
+Cloud URLs use the same API; only the scheme and credentials differ:
 
 ``` r
+# AWS S3 is enabled by default
 Sys.setenv(
   AWS_ACCESS_KEY_ID     = "...",
   AWS_SECRET_ACCESS_KEY = "...",
   AWS_REGION            = "us-east-1"
 )
-os <- ZarrObjectStore$open("s3://my-bucket/path/to/array.zarr")
+s3 <- ZarrObjectStore$open("s3://my-bucket/path/to/store.zarr")
+
+# GCS requires installing with --enable-gcp or --enable-all-cloud
+Sys.setenv(GOOGLE_APPLICATION_CREDENTIALS = "/path/to/service-account.json")
+gcs <- ZarrObjectStore$open("gs://my-bucket/path/to/store.zarr")
+
+# Azure requires installing with --enable-azure or --enable-all-cloud
+Sys.setenv(
+  AZURE_STORAGE_ACCOUNT = "...",
+  AZURE_STORAGE_ACCESS_KEY = "..."
+)
+az <- ZarrObjectStore$open("az://my-container/path/to/store.zarr")
 ```
 
 ## Group metadata
@@ -236,6 +282,41 @@ zv$call_genotype_phased()
 #> [4,] FALSE  TRUE  TRUE
 #> [5,]  TRUE  TRUE FALSE
 ```
+
+### VCF Zarr ZIP archives
+
+VCF Zarr data are often distributed as `.zarr.zip` archives for transfer
+and small examples. `ZarrVcf$open()` accepts a local `.zarr.zip` path
+when the Rust `zip` feature is enabled; `zip` is part of the default
+feature set.
+
+``` r
+zip_path <- system.file("testdata", "vcf_zarr", "v0.4.zarr.zip", package = "Rzarrs")
+zv_zip <- ZarrVcf$open(zip_path)
+zv_zip$version()
+#> [1] "0.4"
+zv_zip$genotypes(variants = 1:2, samples = 1:2)
+#> , , 1
+#>
+#>      [,1] [,2]
+#> [1,]    0    0
+#> [2,]    0    1
+#>
+#> , , 2
+#>
+#>      [,1] [,2]
+#> [1,]    0    1
+#> [2,]    1    1
+```
+
+Current ZIP support is intentionally reader-first and local-file
+oriented: the archive is loaded into a Rust memory store before opening
+the Zarr hierarchy. That is useful for small VCF fixtures and portable
+examples. Large production VCF Zarr archives should be stored as normal
+directory/object-store Zarr, or the backend should be switched to
+upstream `zarrs_zip` once it is vendored for this package. `zarrs_zip`
+is the right long-term target because it can provide a real Zarr storage
+adapter instead of R-level or ad hoc extraction.
 
 ## License
 

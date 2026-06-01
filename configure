@@ -32,6 +32,61 @@ if [ "$(uname)" = "Emscripten" ]; then
   TARGET="wasm32-unknown-emscripten"
 fi
 
+append_feature() {
+  if [ -z "${CONFIGURE_FEATURES}" ]; then
+    CONFIGURE_FEATURES="$1"
+  else
+    CONFIGURE_FEATURES="${CONFIGURE_FEATURES} $1"
+  fi
+}
+
+CONFIGURE_FEATURES=""
+NO_DEFAULT_FEATURES=""
+
+for arg in "$@"; do
+  case "${arg}" in
+    --with-rust-features=*)
+      value="${arg#*=}"
+      value="$(printf '%s' "${value}" | tr ',' ' ')"
+      append_feature "${value}"
+      ;;
+    --without-default-rust-features)
+      NO_DEFAULT_FEATURES="--no-default-features"
+      ;;
+    --enable-gcp)
+      append_feature "gcp"
+      ;;
+    --enable-azure)
+      append_feature "azure"
+      ;;
+    --enable-all-cloud)
+      append_feature "cloud"
+      ;;
+    --enable-altrep)
+      append_feature "altrep"
+      ;;
+    --enable-async-altrep)
+      append_feature "async-altrep"
+      ;;
+    --disable-zip)
+      NO_DEFAULT_FEATURES="--no-default-features"
+      append_feature "aws"
+      ;;
+    --help)
+      echo "Rzarrs configure options:"
+      echo "  --with-rust-features=FEATURES   comma/space separated Cargo features"
+      echo "  --without-default-rust-features pass Cargo --no-default-features"
+      echo "  --enable-gcp                    enable GCS object-store support"
+      echo "  --enable-azure                  enable Azure Blob object-store support"
+      echo "  --enable-all-cloud              enable AWS, GCS, and Azure support"
+      echo "  --enable-altrep                 enable savvy ALTREP feature"
+      echo "  --enable-async-altrep           enable experimental async ALTREP scaffold"
+      echo "  --disable-zip                   disable local .zarr.zip support"
+      exit 0
+      ;;
+  esac
+done
+
 # allow overriding profile externally (e.g. on CI)
 if [ -n "${SAVVY_PROFILE}" ]; then
   PROFILE="${SAVVY_PROFILE}"
@@ -42,9 +97,12 @@ else
   PROFILE=release
 fi
 
-# e.g. SAVVY_FEATURES="a b"  -->  "--features 'a b'"
-if [ -n "${SAVVY_FEATURES}" ]; then
-  FEATURE_FLAGS="--features '${SAVVY_FEATURES}'"
+# e.g. SAVVY_FEATURES="a b" or --with-rust-features=a,b --> Cargo features.
+FEATURES="$(printf '%s %s' "${SAVVY_FEATURES}" "${CONFIGURE_FEATURES}" | xargs)"
+if [ -n "${FEATURES}" ]; then
+  FEATURE_FLAGS="${NO_DEFAULT_FEATURES} --features '${FEATURES}'"
+elif [ -n "${NO_DEFAULT_FEATURES}" ]; then
+  FEATURE_FLAGS="${NO_DEFAULT_FEATURES}"
 fi
 
 # Set macOS deployment target for the Rust cc crate.

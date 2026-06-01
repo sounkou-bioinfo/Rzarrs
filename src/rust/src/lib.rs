@@ -1,5 +1,6 @@
 mod nested;
 mod vcf_schema;
+#[cfg(feature = "zip")]
 mod zip_extract;
 
 #[cfg(feature = "async-altrep")]
@@ -1050,6 +1051,29 @@ fn c_to_r_order<T: Clone>(data: &[T], dims: &[i32]) -> Vec<T> {
     result
 }
 
+#[cfg(feature = "zip")]
+fn open_local_zip_store(path: &str) -> savvy::Result<Arc<dyn ReadListStorage>> {
+    let entries = zip_extract::read_zip_entries(path)
+        .map_err(|e| savvy::Error::new(&format!("cannot read zip '{path}': {e}")))?;
+    let mem_store = zarrs::storage::store::MemoryStore::new();
+    for (name, data) in &entries {
+        let key = zarrs::storage::StoreKey::new(name.as_str())
+            .map_err(|e| savvy::Error::new(&format!("invalid store key '{name}': {e}")))?;
+        use zarrs::storage::WritableStorageTraits;
+        mem_store
+            .set(&key, zarrs::storage::Bytes::copy_from_slice(data))
+            .map_err(|e| savvy::Error::new(&format!("cannot set key '{name}': {e}")))?;
+    }
+    Ok(Arc::new(mem_store))
+}
+
+#[cfg(not(feature = "zip"))]
+fn open_local_zip_store(_path: &str) -> savvy::Result<Arc<dyn ReadListStorage>> {
+    Err(savvy::Error::new(
+        "local .zarr.zip support is disabled; reinstall with Rust feature 'zip'",
+    ))
+}
+
 /// @export
 #[savvy]
 impl ZarrVcf {
@@ -1067,18 +1091,7 @@ impl ZarrVcf {
         }
 
         let store: Arc<dyn ReadListStorage> = if path.to_lowercase().ends_with(".zip") {
-            let entries = zip_extract::read_zip_entries(path)
-                .map_err(|e| savvy::Error::new(&format!("cannot read zip '{path}': {e}")))?;
-            let mem_store = zarrs::storage::store::MemoryStore::new();
-            for (name, data) in &entries {
-                let key = zarrs::storage::StoreKey::new(name.as_str())
-                    .map_err(|e| savvy::Error::new(&format!("invalid store key '{name}': {e}")))?;
-                use zarrs::storage::WritableStorageTraits;
-                mem_store
-                    .set(&key, zarrs::storage::Bytes::copy_from_slice(data))
-                    .map_err(|e| savvy::Error::new(&format!("cannot set key '{name}': {e}")))?;
-            }
-            Arc::new(mem_store)
+            open_local_zip_store(path)?
         } else {
             let pb = std::path::PathBuf::from(path);
             if !pb.exists() {
