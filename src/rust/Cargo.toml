@@ -26,9 +26,9 @@ serde_json = "1"
 flate2 = "1"
 
 [features]
-default = ["http"]
+default = ["cloud"]
 http = ["zarrs_object_store/http"]
-cloud = ["zarrs_object_store/aws", "zarrs_object_store/gcp", "zarrs_object_store/azure"]
+cloud = ["http", "zarrs_object_store/aws", "zarrs_object_store/gcp", "zarrs_object_store/azure"]
 altrep = ["savvy/altrep"]
 async-altrep = ["altrep", "tokio/rt-multi-thread", "tokio/sync"]
 simd-cast = []

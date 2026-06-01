@@ -12,20 +12,19 @@ badge](https://sounkou-bioinfo.r-universe.dev/Rzarrs/badges/version)](https://so
 
 R bindings to the [`zarrs`](https://github.com/zarrs/zarrs) Rust library
 for reading Zarr V3 (and compatible Zarr V2) stores. The current package
-is reader-first: local filesystems and public HTTP/HTTPS object stores
-are supported by default; S3 / GCS / Azure support is available when the
-Rust `cloud` feature is enabled at build time.
+is reader-first: local filesystems, HTTP/HTTPS, S3, GCS, and Azure Blob
+object stores are supported by default.
 
 ## Overview
 
 Rzarrs exposes four savvy-backed reference objects:
 
-| Object            | Purpose                                                                                 |
-|-------------------|-----------------------------------------------------------------------------------------|
-| `ZarrStore`       | Local filesystem store                                                                  |
-| `ZarrObjectStore` | HTTP/HTTPS object store by default; S3/GCS/Azure when built with `SAVVY_FEATURES=cloud` |
-| `ZarrGroup`       | A group node within a store (attributes + child listing)                                |
-| `ZarrArray`       | A single array within any store                                                         |
+| Object            | Purpose                                                              |
+|-------------------|----------------------------------------------------------------------|
+| `ZarrStore`       | Local filesystem store                                               |
+| `ZarrObjectStore` | HTTP/HTTPS, S3, GCS, Azure Blob, or any supported `object_store` URL |
+| `ZarrGroup`       | A group node within a store (attributes + child listing)             |
+| `ZarrArray`       | A single array within any store                                      |
 
 Zarr dtypes are mapped to R types automatically:
 
@@ -118,16 +117,12 @@ arr$metadata()$shape
 #> [1] 4 6
 ```
 
-## Remote store (HTTP/HTTPS; optional S3/GCS/Azure)
+## Remote store (HTTP/HTTPS, S3, GCS, Azure)
 
 `ZarrObjectStore` uses the Rust object-store integration underneath and
-dispatches on the URL scheme. Public `https://` URLs work in the default
-build and need no credentials.
-
-S3/GCS/Azure support is optional to keep the default dependency surface
-smaller. Build with `SAVVY_FEATURES=cloud` to enable cloud providers,
-then set the standard provider environment variables before calling
-`open()`:
+dispatches on the URL scheme. Public `https://` URLs need no
+credentials. For private cloud buckets, set the standard provider
+environment variables before calling `open()`:
 
 | Provider     | Env vars                                                                                                       |
 |--------------|----------------------------------------------------------------------------------------------------------------|
@@ -155,8 +150,8 @@ range(patch)
 #> [1]  8 28
 ```
 
-For private buckets in a cloud-enabled build, it is the same call — just
-set the credentials first:
+For private buckets it is the same call — just set the credentials
+first:
 
 ``` r
 Sys.setenv(

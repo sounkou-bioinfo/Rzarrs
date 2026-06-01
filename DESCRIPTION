@@ -9,8 +9,9 @@ Authors@R: c(
            comment = "see inst/AUTHORS"))
 Description: R bindings to the 'zarrs' Rust library
     <https://github.com/zarrs/zarrs> for reading Zarr V3 (and compatible
-    Zarr V2) stores from local disk. Supports multiple codecs (gzip, zstd,
-    blosc, sharding) and the common numeric data types. SIMD-accelerated
+    Zarr V2) stores from local disk, HTTP/HTTPS, S3, GCS, and Azure Blob
+    storage. Supports multiple codecs (gzip, zstd, blosc, sharding) and
+    the common numeric data types. SIMD-accelerated
     codec paths are selected automatically at runtime by the underlying
     Rust dependency crates.
 License: GPL (>= 3)
