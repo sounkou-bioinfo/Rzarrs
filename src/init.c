@@ -135,6 +135,91 @@ SEXP savvy_ZarrStore_path__impl(SEXP self__) {
     return handle_result(res);
 }
 
+SEXP savvy_ZarrVcf_call__impl(SEXP self__, SEXP c_arg__name) {
+    SEXP res = savvy_ZarrVcf_call__ffi(self__, c_arg__name);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_call_genotype_phased__impl(SEXP self__, SEXP c_arg__variants, SEXP c_arg__samples) {
+    SEXP res = savvy_ZarrVcf_call_genotype_phased__ffi(self__, c_arg__variants, c_arg__samples);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_contigs__impl(SEXP self__) {
+    SEXP res = savvy_ZarrVcf_contigs__ffi(self__);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_fields__impl(SEXP self__) {
+    SEXP res = savvy_ZarrVcf_fields__ffi(self__);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_filters__impl(SEXP self__) {
+    SEXP res = savvy_ZarrVcf_filters__ffi(self__);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_genotypes__impl(SEXP self__, SEXP c_arg__variants, SEXP c_arg__samples) {
+    SEXP res = savvy_ZarrVcf_genotypes__ffi(self__, c_arg__variants, c_arg__samples);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_n_samples__impl(SEXP self__) {
+    SEXP res = savvy_ZarrVcf_n_samples__ffi(self__);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_n_variants__impl(SEXP self__) {
+    SEXP res = savvy_ZarrVcf_n_variants__ffi(self__);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_open__impl(SEXP c_arg__path) {
+    SEXP res = savvy_ZarrVcf_open__ffi(c_arg__path);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_open_object_store__impl(SEXP c_arg__url) {
+    SEXP res = savvy_ZarrVcf_open_object_store__ffi(c_arg__url);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_open_store__impl(SEXP c_arg__store) {
+    SEXP res = savvy_ZarrVcf_open_store__ffi(c_arg__store);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_samples__impl(SEXP self__) {
+    SEXP res = savvy_ZarrVcf_samples__ffi(self__);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_variant__impl(SEXP self__, SEXP c_arg__name) {
+    SEXP res = savvy_ZarrVcf_variant__ffi(self__, c_arg__name);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_variant_allele__impl(SEXP self__) {
+    SEXP res = savvy_ZarrVcf_variant_allele__ffi(self__);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_variant_contig__impl(SEXP self__) {
+    SEXP res = savvy_ZarrVcf_variant_contig__ffi(self__);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_variant_position__impl(SEXP self__) {
+    SEXP res = savvy_ZarrVcf_variant_position__ffi(self__);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrVcf_version__impl(SEXP self__) {
+    SEXP res = savvy_ZarrVcf_version__ffi(self__);
+    return handle_result(res);
+}
+
 
 static const R_CallMethodDef CallEntries[] = {
 
@@ -157,6 +242,23 @@ static const R_CallMethodDef CallEntries[] = {
     {"savvy_ZarrObjectStore_url__impl", (DL_FUNC) &savvy_ZarrObjectStore_url__impl, 1},
     {"savvy_ZarrStore_open__impl", (DL_FUNC) &savvy_ZarrStore_open__impl, 1},
     {"savvy_ZarrStore_path__impl", (DL_FUNC) &savvy_ZarrStore_path__impl, 1},
+    {"savvy_ZarrVcf_call__impl", (DL_FUNC) &savvy_ZarrVcf_call__impl, 2},
+    {"savvy_ZarrVcf_call_genotype_phased__impl", (DL_FUNC) &savvy_ZarrVcf_call_genotype_phased__impl, 3},
+    {"savvy_ZarrVcf_contigs__impl", (DL_FUNC) &savvy_ZarrVcf_contigs__impl, 1},
+    {"savvy_ZarrVcf_fields__impl", (DL_FUNC) &savvy_ZarrVcf_fields__impl, 1},
+    {"savvy_ZarrVcf_filters__impl", (DL_FUNC) &savvy_ZarrVcf_filters__impl, 1},
+    {"savvy_ZarrVcf_genotypes__impl", (DL_FUNC) &savvy_ZarrVcf_genotypes__impl, 3},
+    {"savvy_ZarrVcf_n_samples__impl", (DL_FUNC) &savvy_ZarrVcf_n_samples__impl, 1},
+    {"savvy_ZarrVcf_n_variants__impl", (DL_FUNC) &savvy_ZarrVcf_n_variants__impl, 1},
+    {"savvy_ZarrVcf_open__impl", (DL_FUNC) &savvy_ZarrVcf_open__impl, 1},
+    {"savvy_ZarrVcf_open_object_store__impl", (DL_FUNC) &savvy_ZarrVcf_open_object_store__impl, 1},
+    {"savvy_ZarrVcf_open_store__impl", (DL_FUNC) &savvy_ZarrVcf_open_store__impl, 1},
+    {"savvy_ZarrVcf_samples__impl", (DL_FUNC) &savvy_ZarrVcf_samples__impl, 1},
+    {"savvy_ZarrVcf_variant__impl", (DL_FUNC) &savvy_ZarrVcf_variant__impl, 2},
+    {"savvy_ZarrVcf_variant_allele__impl", (DL_FUNC) &savvy_ZarrVcf_variant_allele__impl, 1},
+    {"savvy_ZarrVcf_variant_contig__impl", (DL_FUNC) &savvy_ZarrVcf_variant_contig__impl, 1},
+    {"savvy_ZarrVcf_variant_position__impl", (DL_FUNC) &savvy_ZarrVcf_variant_position__impl, 1},
+    {"savvy_ZarrVcf_version__impl", (DL_FUNC) &savvy_ZarrVcf_version__impl, 1},
     {NULL, NULL, 0}
 };
 

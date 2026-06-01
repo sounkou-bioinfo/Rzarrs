@@ -41,6 +41,7 @@ $(STATLIB):
 
 clean_intermediate: $(SHLIB)
 	rm -f $(STATLIB)
+	rm -Rf ./rust/target ./rust/vendor
 
 clean:
 	rm -Rf $(SHLIB) $(OBJECTS) $(STATLIB) ./rust/target

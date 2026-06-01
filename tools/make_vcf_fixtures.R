@@ -232,20 +232,55 @@ make_v04 <- function(base) {
 }
 
 # ---------------------------------------------------------------------------
-# write all versions
+# v0.1 — uses group attributes for metadata; no string arrays
+# ---------------------------------------------------------------------------
+
+make_v01 <- function(base) {
+  attrs_json <- '{
+    "vcf_zarr_version": "0.1",
+    "sample_id": ["S1", "S2", "S3"],
+    "contigs": [
+      {"id": "chr1", "length": 1000},
+      {"id": "chr2", "length": 500}
+    ],
+    "filters": [
+      {"id": "PASS", "description": "All filters passed"},
+      {"id": "q30", "description": "Quality below 30"}
+    ]
+  }'
+  write_group(base, attrs_json)
+
+  write_int32_array(base, "variant_contig",   variant_contig,   c(n_variants))
+  write_int32_array(base, "variant_position", variant_position, c(n_variants))
+  write_string_array(base, "variant_allele",  variant_allele,   c(n_variants, n_alleles))
+  write_int32_array(base, "call_genotype",    call_genotype,    c(n_variants, n_samples, ploidy))
+  write_bool_array(base, "call_genotype_phased", call_genotype_phased, c(n_variants, n_samples))
+}
+
+# ---------------------------------------------------------------------------
+# write all versions + zip bundle
 # ---------------------------------------------------------------------------
 
 out_root <- file.path("inst", "testdata", "vcf_zarr")
 
-for (ver in c("v0.2", "v0.3", "v0.4")) {
+for (ver in c("v0.1", "v0.2", "v0.3", "v0.4")) {
   path <- file.path(out_root, ver)
   if (dir.exists(path)) unlink(path, recursive = TRUE)
   switch(ver,
+    "v0.1" = make_v01(path),
     "v0.2" = make_v02(path),
     "v0.3" = make_v03(path),
     "v0.4" = make_v04(path)
   )
   cat("wrote", path, "\n")
 }
+
+# Create a .zarr.zip bundle from v0.4 for ZIP backend testing
+zip_path <- file.path(out_root, "v0.4.zarr.zip")
+if (file.exists(zip_path)) file.remove(zip_path)
+prev <- setwd(file.path(out_root, "v0.4"))
+zip(zip_path, list.files(recursive = TRUE))
+setwd(prev)
+cat("wrote", zip_path, "\n")
 
 cat("Done.\n")

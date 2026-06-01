@@ -10,15 +10,24 @@ An object of class \code{environment} of length 1.
 \usage{
 ZarrVcf
 }
-\arguments{
-\item{x}{Path (string), URL (string), `ZarrStore`, or `ZarrObjectStore`.}
-}
-\value{
-A `ZarrVcf` instance.
-}
 \description{
-`ZarrVcf$open(x)` opens a VCF Zarr store and returns an instance with
-methods to access variant, sample, and genotype data. Supports spec
-versions 0.1 through 0.4.
+`ZarrVcf$open(x)` opens a VCF Zarr store (spec versions 0.1–0.4) and
+returns an instance with methods to access variant, sample, and
+genotype data.
 }
+\section{Methods}{
+
+\describe{
+  \item{`$open(x)`}{Open a VCF Zarr store from a path, URL, `ZarrStore`, or `ZarrObjectStore`.}
+  \item{`$version()`}{VCF Zarr spec version string.}
+  \item{`$n_variants()`, `$n_samples()`}{Number of variants and samples.}
+  \item{`$samples()`, `$contigs()`, `$filters()`}{Character vectors of sample IDs, contig names, filter IDs.}
+  \item{`$fields()`}{Available array names.}
+  \item{`$variant_position()`, `$variant_contig()`, `$variant_allele()`}{Per-variant data.}
+  \item{`$genotypes(variants, samples)`}{3-D array (variants × samples × ploidy) of integer genotypes.}
+  \item{`$call_genotype_phased(variants, samples)`}{Boolean phased matrix.}
+  \item{`$variant(name)`, `$call(name)`}{Generic accessor for `variant_<name>` / `call_<name>` arrays.}
+}
+}
+
 \keyword{datasets}

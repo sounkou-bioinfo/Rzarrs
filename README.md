@@ -11,29 +11,33 @@ badge](https://sounkou-bioinfo.r-universe.dev/Rzarrs/badges/version)](https://so
 <!-- badges: end -->
 
 R bindings to the [`zarrs`](https://github.com/zarrs/zarrs) Rust library
-for reading Zarr V3 (and compatible Zarr V2) stores — from local disk,
-over HTTP/HTTPS, or from S3 / GCS / Azure object storage.
+for reading Zarr V3 (and compatible Zarr V2) stores. The current package
+is reader-first: local filesystems and public HTTP/HTTPS object stores
+are supported by default; S3 / GCS / Azure support is available when the
+Rust `cloud` feature is enabled at build time.
 
 ## Overview
 
-Rzarrs exposes three R6-style reference objects:
+Rzarrs exposes four savvy-backed reference objects:
 
-| Object            | Purpose                                                               |
-|-------------------|-----------------------------------------------------------------------|
-| `ZarrStore`       | Local filesystem store                                                |
-| `ZarrObjectStore` | S3, GCS, Azure Blob, HTTP/HTTPS, or any `object_store`-compatible URL |
-| `ZarrArray`       | A single array within any store                                       |
+| Object            | Purpose                                                                                 |
+|-------------------|-----------------------------------------------------------------------------------------|
+| `ZarrStore`       | Local filesystem store                                                                  |
+| `ZarrObjectStore` | HTTP/HTTPS object store by default; S3/GCS/Azure when built with `SAVVY_FEATURES=cloud` |
+| `ZarrGroup`       | A group node within a store (attributes + child listing)                                |
+| `ZarrArray`       | A single array within any store                                                         |
 
 Zarr dtypes are mapped to R types automatically:
 
-| Zarr dtype                 | R type    | Notes                      |
-|----------------------------|-----------|----------------------------|
-| `float32` / `float64`      | `double`  | NaN → `NA_real_`           |
-| `int8` / `int16` / `int32` | `integer` | `i32::MIN` → `NA_integer_` |
-| `int64`                    | `double`  | exact to 2^53              |
-| `uint8` / `uint16`         | `integer` | always fits                |
-| `uint32` / `uint64`        | `double`  |                            |
-| `bool`                     | `logical` |                            |
+| Zarr dtype                 | R type      | Notes                                        |
+|----------------------------|-------------|----------------------------------------------|
+| `float32` / `float64`      | `double`    | NaN, Inf, -Inf preserved as-is               |
+| `int8` / `int16` / `int32` | `integer`   | `i32::MIN` → `NA_integer_`                   |
+| `int64`                    | `double`    | exact to 2^53                                |
+| `uint8` / `uint16`         | `integer`   | always fits                                  |
+| `uint32` / `uint64`        | `double`    |                                              |
+| `bool`                     | `logical`   |                                              |
+| `string`                   | `character` | variable-length UTF-8 via `vlen-bytes` codec |
 
 Indices are **1-based and inclusive** on both ends — the same convention
 as all other R array operations.
@@ -53,7 +57,8 @@ install.packages(
 )
 ```
 
-A Rust toolchain (cargo + rustc \>= 1.82) is required at install time.
+A Rust toolchain (cargo + rustc \>= 1.82) and GNU Make are required at
+install time.
 
 ## Local store
 
@@ -113,13 +118,16 @@ arr$metadata()$shape
 #> [1] 4 6
 ```
 
-## Remote store (HTTP/HTTPS or S3/GCS/Azure)
+## Remote store (HTTP/HTTPS; optional S3/GCS/Azure)
 
-`ZarrObjectStore` uses the
-[`object_store`](https://docs.rs/object_store) crate and dispatches on
-the URL scheme. For plain `https://` URLs no credentials are needed. For
-private cloud buckets, set the standard provider environment variables
-before calling `open()`:
+`ZarrObjectStore` uses the Rust object-store integration underneath and
+dispatches on the URL scheme. Public `https://` URLs work in the default
+build and need no credentials.
+
+S3/GCS/Azure support is optional to keep the default dependency surface
+smaller. Build with `SAVVY_FEATURES=cloud` to enable cloud providers,
+then set the standard provider environment variables before calling
+`open()`:
 
 | Provider     | Env vars                                                                                                       |
 |--------------|----------------------------------------------------------------------------------------------------------------|
@@ -147,8 +155,8 @@ range(patch)
 #> [1]  8 28
 ```
 
-For private buckets it is the same call — just set the credentials
-first:
+For private buckets in a cloud-enabled build, it is the same call — just
+set the credentials first:
 
 ``` r
 Sys.setenv(
@@ -157,6 +165,81 @@ Sys.setenv(
   AWS_REGION            = "us-east-1"
 )
 os <- ZarrObjectStore$open("s3://my-bucket/path/to/array.zarr")
+```
+
+## Group metadata
+
+``` r
+vcf_path <- system.file("testdata", "vcf_zarr", "v0.4", package = "Rzarrs")
+grp <- ZarrGroup$open(ZarrStore$open(vcf_path), "/")
+names(grp$attributes())
+#> [1] "vcf_zarr_version"     "vcf_meta_information"
+grp$children(FALSE)
+#> $path
+#> [1] "/call_genotype_phased" "/contig_id"            "/variant_allele"
+#> [4] "/variant_contig"       "/variant_position"     "/filter_id"
+#> [7] "/filter_description"   "/sample_id"            "/call_genotype"
+#>
+#> $kind
+#> [1] "array" "array" "array" "array" "array" "array" "array" "array" "array"
+```
+
+## VCF Zarr reader
+
+`ZarrVcf` reads VCF data stored in the [VCF Zarr
+spec](https://github.com/sgkit-dev/vcf-zarr-spec) (v0.1–v0.4). It
+accepts a local path, a URL, or an existing store handle.
+
+``` r
+vcf_path <- system.file("testdata", "vcf_zarr", "v0.4", package = "Rzarrs")
+zv <- ZarrVcf$open(vcf_path)
+
+zv$version()
+#> [1] "0.4"
+zv$n_variants()
+#> [1] 5
+zv$n_samples()
+#> [1] 3
+zv$contigs()
+#> [1] "chr1" "chr2"
+zv$samples()
+#> [1] "S1" "S2" "S3"
+zv$variant_position()
+#> [1] 100 200 300  50 150
+zv$variant_contig()
+#> [1] "chr1" "chr1" "chr1" "chr2" "chr2"
+zv$variant_allele()
+#>      [,1] [,2]
+#> [1,] "A"  "T"
+#> [2,] "C"  "G"
+#> [3,] "G"  "A"
+#> [4,] "T"  "C"
+#> [5,] "A"  "G"
+zv$genotypes()
+#> , , 1
+#>
+#>      [,1] [,2] [,3]
+#> [1,]    0    0    1
+#> [2,]    0    1    0
+#> [3,]    1    0    1
+#> [4,]   -1    0    1
+#> [5,]    0    0    0
+#>
+#> , , 2
+#>
+#>      [,1] [,2] [,3]
+#> [1,]    0    1    1
+#> [2,]    1    1    0
+#> [3,]    0    0    0
+#> [4,]   -1    1    1
+#> [5,]    0    0    1
+zv$call_genotype_phased()
+#>       [,1]  [,2]  [,3]
+#> [1,] FALSE  TRUE FALSE
+#> [2,]  TRUE FALSE  TRUE
+#> [3,] FALSE FALSE FALSE
+#> [4,] FALSE  TRUE  TRUE
+#> [5,]  TRUE  TRUE FALSE
 ```
 
 ## License

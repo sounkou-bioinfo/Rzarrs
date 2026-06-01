@@ -1,0 +1,16 @@
+{
+  "zarr_format": 3,
+  "node_type": "group",
+  "attributes": {
+    "vcf_zarr_version": "0.1",
+    "sample_id": ["S1", "S2", "S3"],
+    "contigs": [
+      {"id": "chr1", "length": 1000},
+      {"id": "chr2", "length": 500}
+    ],
+    "filters": [
+      {"id": "PASS", "description": "All filters passed"},
+      {"id": "q30", "description": "Quality below 30"}
+    ]
+  }
+}

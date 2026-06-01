@@ -16,7 +16,7 @@ Description: R bindings to the 'zarrs' Rust library
 License: GPL (>= 3)
 URL: https://github.com/sounkou-bioinfo/Rzarrs
 BugReports: https://github.com/sounkou-bioinfo/Rzarrs/issues
-SystemRequirements: Cargo (Rust's package manager), rustc >= 1.82.0
-Suggests: tinytest, Rarr
+SystemRequirements: Cargo (Rust's package manager), rustc >= 1.82.0, GNU Make
+Suggests: tinytest
 Encoding: UTF-8
 RoxygenNote: 7.3.3

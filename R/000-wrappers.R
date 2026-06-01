@@ -270,3 +270,140 @@ class(`ZarrStore`) <- c("Rzarrs::ZarrStore__bundle", "savvy_Rzarrs__sealed")
   cat('Rzarrs::ZarrStore\n')
 }
 
+### wrapper functions for ZarrVcf
+
+`ZarrVcf_call` <- function(self) {
+  function(`name`) {
+    .Call(savvy_ZarrVcf_call__impl, `self`, `name`)
+  }
+}
+
+`ZarrVcf_call_genotype_phased` <- function(self) {
+  function(`variants` = NULL, `samples` = NULL) {
+    .Call(savvy_ZarrVcf_call_genotype_phased__impl, `self`, `variants`, `samples`)
+  }
+}
+
+`ZarrVcf_contigs` <- function(self) {
+  function() {
+    .Call(savvy_ZarrVcf_contigs__impl, `self`)
+  }
+}
+
+`ZarrVcf_fields` <- function(self) {
+  function() {
+    .Call(savvy_ZarrVcf_fields__impl, `self`)
+  }
+}
+
+`ZarrVcf_filters` <- function(self) {
+  function() {
+    .Call(savvy_ZarrVcf_filters__impl, `self`)
+  }
+}
+
+`ZarrVcf_genotypes` <- function(self) {
+  function(`variants` = NULL, `samples` = NULL) {
+    .Call(savvy_ZarrVcf_genotypes__impl, `self`, `variants`, `samples`)
+  }
+}
+
+`ZarrVcf_n_samples` <- function(self) {
+  function() {
+    .Call(savvy_ZarrVcf_n_samples__impl, `self`)
+  }
+}
+
+`ZarrVcf_n_variants` <- function(self) {
+  function() {
+    .Call(savvy_ZarrVcf_n_variants__impl, `self`)
+  }
+}
+
+`ZarrVcf_samples` <- function(self) {
+  function() {
+    .Call(savvy_ZarrVcf_samples__impl, `self`)
+  }
+}
+
+`ZarrVcf_variant` <- function(self) {
+  function(`name`) {
+    .Call(savvy_ZarrVcf_variant__impl, `self`, `name`)
+  }
+}
+
+`ZarrVcf_variant_allele` <- function(self) {
+  function() {
+    .Call(savvy_ZarrVcf_variant_allele__impl, `self`)
+  }
+}
+
+`ZarrVcf_variant_contig` <- function(self) {
+  function() {
+    .Call(savvy_ZarrVcf_variant_contig__impl, `self`)
+  }
+}
+
+`ZarrVcf_variant_position` <- function(self) {
+  function() {
+    .Call(savvy_ZarrVcf_variant_position__impl, `self`)
+  }
+}
+
+`ZarrVcf_version` <- function(self) {
+  function() {
+    .Call(savvy_ZarrVcf_version__impl, `self`)
+  }
+}
+
+`.savvy_wrap_ZarrVcf` <- function(ptr) {
+  e <- new.env(parent = emptyenv())
+  e$.ptr <- ptr
+  e$`call` <- `ZarrVcf_call`(ptr)
+  e$`call_genotype_phased` <- `ZarrVcf_call_genotype_phased`(ptr)
+  e$`contigs` <- `ZarrVcf_contigs`(ptr)
+  e$`fields` <- `ZarrVcf_fields`(ptr)
+  e$`filters` <- `ZarrVcf_filters`(ptr)
+  e$`genotypes` <- `ZarrVcf_genotypes`(ptr)
+  e$`n_samples` <- `ZarrVcf_n_samples`(ptr)
+  e$`n_variants` <- `ZarrVcf_n_variants`(ptr)
+  e$`samples` <- `ZarrVcf_samples`(ptr)
+  e$`variant` <- `ZarrVcf_variant`(ptr)
+  e$`variant_allele` <- `ZarrVcf_variant_allele`(ptr)
+  e$`variant_contig` <- `ZarrVcf_variant_contig`(ptr)
+  e$`variant_position` <- `ZarrVcf_variant_position`(ptr)
+  e$`version` <- `ZarrVcf_version`(ptr)
+
+  class(e) <- c("Rzarrs::ZarrVcf", "ZarrVcf", "savvy_Rzarrs__sealed")
+  e
+}
+
+
+#' A high-level reader for VCF Zarr stores (spec versions 0.1–0.4).
+#'
+#' @export
+`ZarrVcf` <- new.env(parent = emptyenv())
+
+### associated functions for ZarrVcf
+
+`ZarrVcf`$`open` <- function(`path`) {
+  .savvy_wrap_ZarrVcf(.Call(savvy_ZarrVcf_open__impl, `path`))
+}
+
+`ZarrVcf`$`open_object_store` <- function(`url`) {
+  .savvy_wrap_ZarrVcf(.Call(savvy_ZarrVcf_open_object_store__impl, `url`))
+}
+
+`ZarrVcf`$`open_store` <- function(`store`) {
+  `store` <- .savvy_extract_ptr(`store`, "Rzarrs::ZarrStore")
+  .savvy_wrap_ZarrVcf(.Call(savvy_ZarrVcf_open_store__impl, `store`))
+}
+
+
+class(`ZarrVcf`) <- c("Rzarrs::ZarrVcf__bundle", "savvy_Rzarrs__sealed")
+
+#' @export
+`print.Rzarrs::ZarrVcf__bundle` <- function(x, ...) {
+  cat('Rzarrs::ZarrVcf\n')
+}
+

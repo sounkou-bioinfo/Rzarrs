@@ -15,6 +15,7 @@
 
 ^src/rust/\.cargo$
 ^src/rust/target$
+^src/rust/vendor$
 ^src/Makevars\.win$
 ^Makefile$
 ^_pkgdown\.yml$

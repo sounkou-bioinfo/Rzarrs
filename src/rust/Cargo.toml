@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["staticlib", "lib"]
 
 [dependencies]
-savvy = "*"
+savvy = { version = "0.10.2", default-features = false }
 zarrs = { version = "0.23", default-features = false, features = [
     "filesystem",
     "async",
@@ -19,12 +19,19 @@ zarrs = { version = "0.23", default-features = false, features = [
     "transpose",
     "crc32c",
 ] }
-zarrs_object_store = { version = "0.6", features = ["aws", "gcp", "azure", "http"] }
-object_store = { version = "0.13", default-features = false }
+zarrs_object_store = { version = "0.6", default-features = false, features = ["http"] }
 url = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", default-features = false, features = ["rt", "time"] }
 serde_json = "1"
-openssl = { version = "0.10", features = ["vendored"] }
+flate2 = "1"
+
+[features]
+default = ["http"]
+http = ["zarrs_object_store/http"]
+cloud = ["zarrs_object_store/aws", "zarrs_object_store/gcp", "zarrs_object_store/azure"]
+altrep = ["savvy/altrep"]
+async-altrep = ["altrep", "tokio/rt-multi-thread", "tokio/sync"]
+simd-cast = []
 
 [profile.release]
 panic = "abort"

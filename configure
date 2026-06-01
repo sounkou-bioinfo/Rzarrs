@@ -71,6 +71,3 @@ sed \
   -e "s/@FEATURE_FLAGS@/${FEATURE_FLAGS}/" \
   -e "s|@BEFORE_CARGO_BUILD@|${BEFORE_CARGO_BUILD}|" \
   src/Makevars.in > src/Makevars
-
-# OpenSSL is compiled from source via the `openssl` crate (features = ["vendored"]).
-# No system OpenSSL installation is required.

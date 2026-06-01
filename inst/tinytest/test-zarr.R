@@ -1,7 +1,6 @@
 ## Rzarrs tinytest suite
 ##
 ## Primary fixtures are bundled under inst/testdata/ — no external dependencies.
-## If Rarr is installed (Suggests), its bundled example arrays are also exercised.
 ## See tools/make_fixtures.R to regenerate the bundled fixtures.
 
 library(Rzarrs)
@@ -76,30 +75,9 @@ expect_equal(fdata[1L, 1L], 1.0)
 expect_equal(fdata[4L, 6L], 24.0)
 
 # ---------------------------------------------------------------------------
-# Optional: Rarr bundled examples (richer real-world coverage)
+# Rust-side R indexing validation
 # ---------------------------------------------------------------------------
-
-if (requireNamespace("Rarr", quietly = TRUE)) {
-  rarr_ex <- function(dtype) {
-    p <- system.file("extdata", "zarr_examples", "column-first",
-                     paste0(dtype, ".zarr"), package = "Rarr")
-    if (nzchar(p) && dir.exists(p)) p else NULL
-  }
-
-  p32 <- rarr_ex("int32")
-  if (!is.null(p32)) {
-    ra <- ZarrArray$open(ZarrStore$open(p32), "/")
-    expect_equal(ra$dtype(), "int32")
-    expect_equal(ra$ndim(), 3L)
-    rdata <- ra$retrieve(NULL, NULL)
-    expect_true(is.integer(rdata))
-  }
-
-  pf32 <- rarr_ex("float32")
-  if (!is.null(pf32)) {
-    rf <- ZarrArray$open(ZarrStore$open(pf32), "/")
-    expect_equal(rf$dtype(), "float32")
-    rfd <- rf$retrieve(NULL, NULL)
-    expect_true(is.double(rfd))
-  }
-}
+expect_error(arr$retrieve(c(1L, 1L), NULL), "starts and ends")
+expect_error(arr$retrieve(c(1.5, 1), c(2, 2)), "whole-number")
+expect_error(arr$retrieve(c(0L, 1L), c(1L, 2L)), ">= 1")
+expect_error(arr$retrieve(c(1L, 1L), c(5L, 2L)), "out of range")

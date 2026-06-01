@@ -19,29 +19,33 @@ knitr::opts_chunk$set(
 <!-- badges: end -->
 
 R bindings to the [`zarrs`](https://github.com/zarrs/zarrs) Rust library for
-reading Zarr V3 (and compatible Zarr V2) stores — from local disk, over
-HTTP/HTTPS, or from S3 / GCS / Azure object storage.
+reading Zarr V3 (and compatible Zarr V2) stores. The current package is
+reader-first: local filesystems and public HTTP/HTTPS object stores are
+supported by default; S3 / GCS / Azure support is available when the Rust
+`cloud` feature is enabled at build time.
 
 ## Overview
 
-Rzarrs exposes three R6-style reference objects:
+Rzarrs exposes four savvy-backed reference objects:
 
 | Object | Purpose |
 |---|---|
 | `ZarrStore` | Local filesystem store |
-| `ZarrObjectStore` | S3, GCS, Azure Blob, HTTP/HTTPS, or any `object_store`-compatible URL |
+| `ZarrObjectStore` | HTTP/HTTPS object store by default; S3/GCS/Azure when built with `SAVVY_FEATURES=cloud` |
+| `ZarrGroup` | A group node within a store (attributes + child listing) |
 | `ZarrArray` | A single array within any store |
 
 Zarr dtypes are mapped to R types automatically:
 
 | Zarr dtype | R type | Notes |
 |---|---|---|
-| `float32` / `float64` | `double` | NaN → `NA_real_` |
+| `float32` / `float64` | `double` | NaN, Inf, -Inf preserved as-is |
 | `int8` / `int16` / `int32` | `integer` | `i32::MIN` → `NA_integer_` |
 | `int64` | `double` | exact to 2^53 |
 | `uint8` / `uint16` | `integer` | always fits |
 | `uint32` / `uint64` | `double` | |
 | `bool` | `logical` | |
+| `string` | `character` | variable-length UTF-8 via `vlen-bytes` codec |
 
 Indices are **1-based and inclusive** on both ends — the same convention as
 all other R array operations.
@@ -61,7 +65,7 @@ install.packages(
 )
 ```
 
-A Rust toolchain (cargo + rustc >= 1.82) is required at install time.
+A Rust toolchain (cargo + rustc >= 1.82) and GNU Make are required at install time.
 
 ## Local store
 
@@ -103,12 +107,15 @@ arr$metadata()$data_type
 arr$metadata()$shape
 ```
 
-## Remote store (HTTP/HTTPS or S3/GCS/Azure)
+## Remote store (HTTP/HTTPS; optional S3/GCS/Azure)
 
-`ZarrObjectStore` uses the [`object_store`](https://docs.rs/object_store) crate
-and dispatches on the URL scheme. For plain `https://` URLs no credentials are
-needed. For private cloud buckets, set the standard provider environment
-variables before calling `open()`:
+`ZarrObjectStore` uses the Rust object-store integration underneath and
+dispatches on the URL scheme. Public `https://` URLs work in the default build
+and need no credentials.
+
+S3/GCS/Azure support is optional to keep the default dependency surface smaller.
+Build with `SAVVY_FEATURES=cloud` to enable cloud providers, then set the
+standard provider environment variables before calling `open()`:
 
 | Provider | Env vars |
 |---|---|
@@ -132,7 +139,7 @@ dim(patch)
 range(patch)
 ```
 
-For private buckets it is the same call — just set the credentials first:
+For private buckets in a cloud-enabled build, it is the same call — just set the credentials first:
 
 ```r
 Sys.setenv(
@@ -141,6 +148,37 @@ Sys.setenv(
   AWS_REGION            = "us-east-1"
 )
 os <- ZarrObjectStore$open("s3://my-bucket/path/to/array.zarr")
+```
+
+## Group metadata
+
+```{r group}
+vcf_path <- system.file("testdata", "vcf_zarr", "v0.4", package = "Rzarrs")
+grp <- ZarrGroup$open(ZarrStore$open(vcf_path), "/")
+names(grp$attributes())
+grp$children(FALSE)
+```
+
+## VCF Zarr reader
+
+`ZarrVcf` reads VCF data stored in the
+[VCF Zarr spec](https://github.com/sgkit-dev/vcf-zarr-spec) (v0.1–v0.4).
+It accepts a local path, a URL, or an existing store handle.
+
+```{r vcf}
+vcf_path <- system.file("testdata", "vcf_zarr", "v0.4", package = "Rzarrs")
+zv <- ZarrVcf$open(vcf_path)
+
+zv$version()
+zv$n_variants()
+zv$n_samples()
+zv$contigs()
+zv$samples()
+zv$variant_position()
+zv$variant_contig()
+zv$variant_allele()
+zv$genotypes()
+zv$call_genotype_phased()
 ```
 
 ## License

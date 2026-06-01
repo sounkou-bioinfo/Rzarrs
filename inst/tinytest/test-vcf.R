@@ -27,7 +27,7 @@ expect_true(nchar(aj) > 0)
 zv_path <- ZarrVcf$open(base)
 expect_true(inherits(zv_path, "ZarrVcf"))
 
-zv_store <- ZarrVcf$open(ZarrStore$open(base))
+zv_store <- ZarrVcf$open_store(ZarrStore$open(base))
 expect_true(inherits(zv_store, "ZarrVcf"))
 
 # ---- ZarrVcf$version ----
@@ -106,3 +106,36 @@ expect_true("call_genotype" %in% flds)
 expect_true("variant_position" %in% flds)
 expect_true("variant_contig" %in% flds)
 expect_true("variant_allele" %in% flds)
+
+# ---- v0.1 (group-attribute metadata) ----
+z01 <- zv("v0.1")
+expect_equal(z01$version(), "0.1")
+expect_equal(z01$n_variants(), 5L)
+expect_equal(z01$n_samples(), 3L)
+expect_equal(z01$samples(), c("S1", "S2", "S3"))
+expect_equal(z01$contigs(), c("chr1", "chr2"))
+expect_equal(z01$filters(), c("PASS", "q30"))
+expect_equal(z01$variant_position(), c(100L, 200L, 300L, 50L, 150L))
+expect_equal(z01$variant_contig(), c("chr1", "chr1", "chr1", "chr2", "chr2"))
+
+# ---- ZIP backend ----
+zip_path <- system.file("testdata", "vcf_zarr", "v0.4.zarr.zip", package = "Rzarrs")
+zz <- ZarrVcf$open(zip_path)
+expect_true(inherits(zz, "ZarrVcf"))
+expect_equal(zz$version(), "0.4")
+expect_equal(zz$n_variants(), 5L)
+expect_equal(zz$n_samples(), 3L)
+expect_equal(zz$samples(), c("S1", "S2", "S3"))
+expect_equal(zz$contigs(), c("chr1", "chr2"))
+expect_equal(zz$variant_position(), c(100L, 200L, 300L, 50L, 150L))
+expect_equal(zz$variant_contig(), c("chr1", "chr1", "chr1", "chr2", "chr2"))
+phz <- zz$call_genotype_phased()
+expect_equal(dim(phz), c(5L, 3L))
+expect_true(is.logical(phz))
+# No temp dir leakage
+expect_false(any(grepl("rzarrs_", list.dirs(tempdir(), recursive = FALSE))))
+
+# ---- VCF index validation is Rust-side and rejects silent truncation ----
+z <- zv("v0.4")
+expect_error(z$genotypes(variants = 1.5, samples = 1), "whole numbers")
+expect_error(z$call_genotype_phased(variants = 1, samples = NA_integer_), "NA")

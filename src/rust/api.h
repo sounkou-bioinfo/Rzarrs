@@ -24,3 +24,22 @@ SEXP savvy_ZarrObjectStore_url__ffi(SEXP self__);
 // methods and associated functions for ZarrStore
 SEXP savvy_ZarrStore_open__ffi(SEXP c_arg__path);
 SEXP savvy_ZarrStore_path__ffi(SEXP self__);
+
+// methods and associated functions for ZarrVcf
+SEXP savvy_ZarrVcf_call__ffi(SEXP self__, SEXP c_arg__name);
+SEXP savvy_ZarrVcf_call_genotype_phased__ffi(SEXP self__, SEXP c_arg__variants, SEXP c_arg__samples);
+SEXP savvy_ZarrVcf_contigs__ffi(SEXP self__);
+SEXP savvy_ZarrVcf_fields__ffi(SEXP self__);
+SEXP savvy_ZarrVcf_filters__ffi(SEXP self__);
+SEXP savvy_ZarrVcf_genotypes__ffi(SEXP self__, SEXP c_arg__variants, SEXP c_arg__samples);
+SEXP savvy_ZarrVcf_n_samples__ffi(SEXP self__);
+SEXP savvy_ZarrVcf_n_variants__ffi(SEXP self__);
+SEXP savvy_ZarrVcf_open__ffi(SEXP c_arg__path);
+SEXP savvy_ZarrVcf_open_object_store__ffi(SEXP c_arg__url);
+SEXP savvy_ZarrVcf_open_store__ffi(SEXP c_arg__store);
+SEXP savvy_ZarrVcf_samples__ffi(SEXP self__);
+SEXP savvy_ZarrVcf_variant__ffi(SEXP self__, SEXP c_arg__name);
+SEXP savvy_ZarrVcf_variant_allele__ffi(SEXP self__);
+SEXP savvy_ZarrVcf_variant_contig__ffi(SEXP self__);
+SEXP savvy_ZarrVcf_variant_position__ffi(SEXP self__);
+SEXP savvy_ZarrVcf_version__ffi(SEXP self__);
