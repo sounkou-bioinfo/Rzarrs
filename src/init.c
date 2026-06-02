@@ -39,6 +39,16 @@ SEXP handle_result(SEXP res_) {
     return (SEXP)res;
 }
 
+SEXP savvy_rzarrs_codec_capabilities__impl(void) {
+    SEXP res = savvy_rzarrs_codec_capabilities__ffi();
+    return handle_result(res);
+}
+
+SEXP savvy_rzarrs_dtype_plan__impl(SEXP c_arg__dtype) {
+    SEXP res = savvy_rzarrs_dtype_plan__ffi(c_arg__dtype);
+    return handle_result(res);
+}
+
 SEXP savvy_rzarrs_int64_is_na__impl(SEXP c_arg__x) {
     SEXP res = savvy_rzarrs_int64_is_na__ffi(c_arg__x);
     return handle_result(res);
@@ -101,6 +111,16 @@ SEXP savvy_rzarrs_uint64_values__impl(SEXP c_arg__x) {
 
 SEXP savvy_ZarrArray_chunk_shape__impl(SEXP self__) {
     SEXP res = savvy_ZarrArray_chunk_shape__ffi(self__);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrArray_codec_capabilities__impl(SEXP self__) {
+    SEXP res = savvy_ZarrArray_codec_capabilities__ffi(self__);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrArray_codecs__impl(SEXP self__) {
+    SEXP res = savvy_ZarrArray_codecs__ffi(self__);
     return handle_result(res);
 }
 
@@ -286,6 +306,8 @@ SEXP savvy_ZarrVcf_version__impl(SEXP self__) {
 
 
 static const R_CallMethodDef CallEntries[] = {
+    {"savvy_rzarrs_codec_capabilities__impl", (DL_FUNC) &savvy_rzarrs_codec_capabilities__impl, 0},
+    {"savvy_rzarrs_dtype_plan__impl", (DL_FUNC) &savvy_rzarrs_dtype_plan__impl, 1},
     {"savvy_rzarrs_int64_is_na__impl", (DL_FUNC) &savvy_rzarrs_int64_is_na__impl, 1},
     {"savvy_rzarrs_int64_math__impl", (DL_FUNC) &savvy_rzarrs_int64_math__impl, 2},
     {"savvy_rzarrs_int64_op__impl", (DL_FUNC) &savvy_rzarrs_int64_op__impl, 3},
@@ -299,6 +321,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"savvy_rzarrs_uint64_to_double__impl", (DL_FUNC) &savvy_rzarrs_uint64_to_double__impl, 1},
     {"savvy_rzarrs_uint64_values__impl", (DL_FUNC) &savvy_rzarrs_uint64_values__impl, 1},
     {"savvy_ZarrArray_chunk_shape__impl", (DL_FUNC) &savvy_ZarrArray_chunk_shape__impl, 1},
+    {"savvy_ZarrArray_codec_capabilities__impl", (DL_FUNC) &savvy_ZarrArray_codec_capabilities__impl, 1},
+    {"savvy_ZarrArray_codecs__impl", (DL_FUNC) &savvy_ZarrArray_codecs__impl, 1},
     {"savvy_ZarrArray_dimension_names__impl", (DL_FUNC) &savvy_ZarrArray_dimension_names__impl, 1},
     {"savvy_ZarrArray_dtype__impl", (DL_FUNC) &savvy_ZarrArray_dtype__impl, 1},
     {"savvy_ZarrArray_dtype_plan__impl", (DL_FUNC) &savvy_ZarrArray_dtype_plan__impl, 1},

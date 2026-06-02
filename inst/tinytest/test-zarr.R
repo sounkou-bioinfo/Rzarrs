@@ -18,6 +18,7 @@ float32_path <- fixture("float32.zarr")
 uint8_path <- fixture("uint8.zarr")
 complex64_path <- fixture("complex64.zarr")
 complex128_path <- fixture("complex128.zarr")
+vcf_zip_path <- fixture(file.path("vcf_zarr", "v0.4.zarr.zip"))
 
 # ---------------------------------------------------------------------------
 # ZarrStore
@@ -45,6 +46,19 @@ expect_null(arr$dimension_names())
 json <- arr$metadata_json()
 expect_true(is.character(json) && nzchar(json))
 
+arr_codecs <- arr$codecs()
+expect_true("bytes" %in% arr_codecs)
+arr_codec_caps <- arr$codec_capabilities()
+expect_true("bytes" %in% arr_codec_caps$codec)
+expect_true(arr_codec_caps$supported[arr_codec_caps$codec == "bytes"])
+all_codec_caps <- codec_capabilities()
+expect_true("blosc" %in% all_codec_caps$codec)
+expect_true(all_codec_caps$supported[all_codec_caps$codec == "blosc"])
+expect_equal(dtype_plan("float128")$r_type, "Real")
+expect_equal(dtype_plan("float128")$precision, "PromotedLossy")
+expect_false(dtype_plan("float128")$lossless)
+expect_equal(dtype_plan("decimal128")$r_type, "Real")
+
 # ---------------------------------------------------------------------------
 # ZarrArray — retrieve full array
 # ---------------------------------------------------------------------------
@@ -68,6 +82,19 @@ sub <- arr$retrieve(c(1L, 1L), c(2L, 3L))
 expect_equal(dim(sub), c(2L, 3L))
 expect_true(is.integer(sub))
 expect_equal(as.vector(sub), c(1L, 7L, 2L, 8L, 3L, 9L))
+
+# ---------------------------------------------------------------------------
+# Generic local .zarr.zip store support
+# ---------------------------------------------------------------------------
+
+zip_store <- ZarrStore$open(vcf_zip_path)
+zip_arr <- ZarrArray$open(zip_store, "/variant_position")
+expect_equal(zip_arr$dtype(), "int32")
+zip_data <- zip_arr$retrieve(NULL, NULL)
+expect_true(is.integer(zip_data))
+expect_equal(length(zip_data), 5L)
+zip_group <- ZarrGroup$open(zip_store, "/")
+expect_true("/variant_position" %in% zip_group$children(FALSE)$path)
 
 # ---------------------------------------------------------------------------
 # uint8 bundled fixture — numeric unsigned byte values become R integers

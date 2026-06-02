@@ -38,6 +38,16 @@ NULL
 }
 
 
+`rzarrs_codec_capabilities` <- function() {
+  .Call(savvy_rzarrs_codec_capabilities__impl)
+}
+
+
+`rzarrs_dtype_plan` <- function(`dtype`) {
+  .Call(savvy_rzarrs_dtype_plan__impl, `dtype`)
+}
+
+
 `rzarrs_int64_is_na` <- function(`x`) {
   .Call(savvy_rzarrs_int64_is_na__impl, `x`)
 }
@@ -105,6 +115,18 @@ NULL
   }
 }
 
+`ZarrArray_codec_capabilities` <- function(self) {
+  function() {
+    .Call(savvy_ZarrArray_codec_capabilities__impl, `self`)
+  }
+}
+
+`ZarrArray_codecs` <- function(self) {
+  function() {
+    .Call(savvy_ZarrArray_codecs__impl, `self`)
+  }
+}
+
 `ZarrArray_dimension_names` <- function(self) {
   function() {
     .Call(savvy_ZarrArray_dimension_names__impl, `self`)
@@ -157,6 +179,8 @@ NULL
   e <- new.env(parent = emptyenv())
   e$.ptr <- ptr
   e$`chunk_shape` <- `ZarrArray_chunk_shape`(ptr)
+  e$`codec_capabilities` <- `ZarrArray_codec_capabilities`(ptr)
+  e$`codecs` <- `ZarrArray_codecs`(ptr)
   e$`dimension_names` <- `ZarrArray_dimension_names`(ptr)
   e$`dtype` <- `ZarrArray_dtype`(ptr)
   e$`dtype_plan` <- `ZarrArray_dtype_plan`(ptr)

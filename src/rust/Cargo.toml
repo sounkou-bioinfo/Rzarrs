@@ -12,6 +12,7 @@ zarrs = { version = "0.23", default-features = false, features = [
     "filesystem",
     "async",
     "ndarray",
+    "blosc",
     "gzip",
     "zstd",
     "sharding",

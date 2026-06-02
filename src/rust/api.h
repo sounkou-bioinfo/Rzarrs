@@ -1,3 +1,5 @@
+SEXP savvy_rzarrs_codec_capabilities__ffi(void);
+SEXP savvy_rzarrs_dtype_plan__ffi(SEXP c_arg__dtype);
 SEXP savvy_rzarrs_int64_is_na__ffi(SEXP c_arg__x);
 SEXP savvy_rzarrs_int64_math__ffi(SEXP c_arg__x, SEXP c_arg__op);
 SEXP savvy_rzarrs_int64_op__ffi(SEXP c_arg__x, SEXP c_arg__y, SEXP c_arg__op);
@@ -13,6 +15,8 @@ SEXP savvy_rzarrs_uint64_values__ffi(SEXP c_arg__x);
 
 // methods and associated functions for ZarrArray
 SEXP savvy_ZarrArray_chunk_shape__ffi(SEXP self__);
+SEXP savvy_ZarrArray_codec_capabilities__ffi(SEXP self__);
+SEXP savvy_ZarrArray_codecs__ffi(SEXP self__);
 SEXP savvy_ZarrArray_dimension_names__ffi(SEXP self__);
 SEXP savvy_ZarrArray_dtype__ffi(SEXP self__);
 SEXP savvy_ZarrArray_dtype_plan__ffi(SEXP self__);

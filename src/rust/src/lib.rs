@@ -71,7 +71,7 @@ fn make_tokio_runtime() -> savvy::Result<Arc<tokio::runtime::Runtime>> {
 /// @export
 #[savvy]
 pub struct ZarrStore {
-    inner: Arc<FilesystemStore>,
+    inner: Arc<dyn ReadListStorage>,
     path: String,
 }
 
@@ -80,7 +80,7 @@ pub struct ZarrStore {
 impl ZarrStore {
     /// Open a local Zarr store at the given path.
     ///
-    /// @param path Path to the `.zarr` directory.
+    /// @param path Path to a `.zarr` directory or local `.zarr.zip`/`.zip` archive.
     /// @returns A `ZarrStore` object.
     /// @export
     fn open(path: &str) -> savvy::Result<Self> {
@@ -88,10 +88,15 @@ impl ZarrStore {
         if !pb.exists() {
             return Err(savvy::Error::new(&format!("path does not exist: {path}")));
         }
-        let store = FilesystemStore::new(pb)
-            .map_err(|e| savvy::Error::new(&format!("cannot open store: {e}")))?;
+        let inner: Arc<dyn ReadListStorage> = if path.to_lowercase().ends_with(".zip") {
+            open_local_zip_store(path)?
+        } else {
+            let store = FilesystemStore::new(pb)
+                .map_err(|e| savvy::Error::new(&format!("cannot open store: {e}")))?;
+            Arc::new(store)
+        };
         Ok(Self {
-            inner: Arc::new(store),
+            inner,
             path: path.to_string(),
         })
     }
@@ -426,6 +431,30 @@ impl ZarrArray {
         dtype_plan_to_sexp(self.inner.data_type().to_string().as_str())
     }
 
+    /// Codec names declared by this array, including nested sharding codecs.
+    ///
+    /// @returns A character vector of codec names in metadata traversal order.
+    /// @export
+    fn codecs(&self) -> savvy::Result<savvy::Sexp> {
+        let value = serde_json::to_value(self.inner.metadata())
+            .map_err(|e| savvy::Error::new(&e.to_string()))?;
+        let mut codec_names = Vec::new();
+        collect_codec_names_from_value(&value, &mut codec_names);
+        Ok(string_vec_to_sexp(&codec_names)?.into())
+    }
+
+    /// Report whether this array's declared codecs are supported by Rzarrs.
+    ///
+    /// @returns A named list with `codec` and `supported` vectors.
+    /// @export
+    fn codec_capabilities(&self) -> savvy::Result<savvy::Sexp> {
+        let value = serde_json::to_value(self.inner.metadata())
+            .map_err(|e| savvy::Error::new(&e.to_string()))?;
+        let mut codec_names = Vec::new();
+        collect_codec_names_from_value(&value, &mut codec_names);
+        codec_capabilities_to_sexp(&codec_names)
+    }
+
     /// Dimension names, if any.
     ///
     /// @returns A character vector, or `NULL` if the array has no dimension names.
@@ -546,6 +575,92 @@ fn dtype_plan_to_sexp(dtype_name: &str) -> savvy::Result<savvy::Sexp> {
     )?;
 
     Ok(out.into())
+}
+
+fn supported_codec_names() -> &'static [&'static str] {
+    &[
+        "bytes",
+        "endian",
+        "gzip",
+        "zstd",
+        "crc32c",
+        "sharding_indexed",
+        "sharding-indexed",
+        "transpose",
+        "blosc",
+    ]
+}
+
+fn codec_supported(name: &str) -> bool {
+    supported_codec_names().iter().any(|codec| *codec == name)
+}
+
+fn collect_codec_names_from_value(value: &serde_json::Value, out: &mut Vec<String>) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, child) in map.iter() {
+                if key == "codecs" {
+                    collect_codec_names_from_codec_array(child, out);
+                } else if key == "configuration" {
+                    collect_codec_names_from_value(child, out);
+                }
+            }
+        }
+        serde_json::Value::Array(values) => {
+            for child in values {
+                collect_codec_names_from_value(child, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_codec_names_from_codec_array(value: &serde_json::Value, out: &mut Vec<String>) {
+    if let serde_json::Value::Array(codecs) = value {
+        for codec in codecs {
+            if let serde_json::Value::Object(map) = codec {
+                if let Some(name) = map.get("name").and_then(|name| name.as_str()) {
+                    out.push(name.to_string());
+                }
+                if let Some(configuration) = map.get("configuration") {
+                    collect_codec_names_from_value(configuration, out);
+                }
+            }
+        }
+    }
+}
+
+fn string_vec_to_sexp(values: &[String]) -> savvy::Result<OwnedStringSexp> {
+    let mut out = OwnedStringSexp::new(values.len())?;
+    for (i, value) in values.iter().enumerate() {
+        out.set_elt(i, value)?;
+    }
+    Ok(out)
+}
+
+fn codec_capabilities_to_sexp(codec_names: &[String]) -> savvy::Result<savvy::Sexp> {
+    let mut supported = OwnedLogicalSexp::new(codec_names.len())?;
+    for (i, codec) in codec_names.iter().enumerate() {
+        supported.set_elt(i, codec_supported(codec))?;
+    }
+    let mut out = OwnedListSexp::new(2, true)?;
+    out.set_name_and_value(0, "codec", string_vec_to_sexp(codec_names)?)?;
+    out.set_name_and_value(1, "supported", supported)?;
+    Ok(out.into())
+}
+
+#[savvy]
+fn rzarrs_codec_capabilities() -> savvy::Result<savvy::Sexp> {
+    let codec_names = supported_codec_names()
+        .iter()
+        .map(|codec| codec.to_string())
+        .collect::<Vec<_>>();
+    codec_capabilities_to_sexp(&codec_names)
+}
+
+#[savvy]
+fn rzarrs_dtype_plan(dtype: &str) -> savvy::Result<savvy::Sexp> {
+    dtype_plan_to_sexp(dtype)
 }
 
 fn coerce_to_i64_vec(s: savvy::Sexp, label: &str) -> savvy::Result<Vec<i64>> {

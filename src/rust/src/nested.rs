@@ -90,7 +90,7 @@ impl Default for DtypePolicy {
         Self {
             int64: Integer64Policy::String,
             low_precision_float: FloatExtensionPolicy::Double,
-            high_precision_float: FloatExtensionPolicy::ExtensionVector,
+            high_precision_float: FloatExtensionPolicy::Double,
             unknown_extension_as_handle: true,
         }
     }
@@ -403,13 +403,13 @@ fn plan_float_extension(
             nullable: false,
             nested: false,
             lossless: f64_exact,
-            requires_explicit_cast: !f64_exact,
+            requires_explicit_cast: false,
             extension_name: None,
             note: if f64_exact {
                 Some(format!("{dtype_name} is promoted to R double exactly"))
             } else {
                 Some(format!(
-                    "{dtype_name} to R double is lossy and must be explicit"
+                    "{dtype_name} materializes as lossy R double; exact payload preservation requires an explicit extension-vector policy"
                 ))
             },
         },

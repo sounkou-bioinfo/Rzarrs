@@ -44,17 +44,21 @@ Zarr dtypes are mapped to R types automatically on read:
 | `numpy.datetime64`                             | `Rzarrs_int64`                  | exact int64 payload with R attributes `zarr_dtype`, `unit`, and `scale_factor`; `i64::MIN` is missing/NaT; scale explicitly before POSIXct coercion                                                          |
 | `numpy.timedelta64`                            | `Rzarrs_int64`                  | exact int64 payload with R attributes `zarr_dtype`, `unit`, and `scale_factor`; `i64::MIN` is missing/NaT; scale explicitly before seconds coercion                                                          |
 | `complex64` / `complex128`                     | `complex`                       | R native complex vector; `complex64` components are promoted to double                                                                                                                                       |
-| `float128` / plugin dtypes                     | not yet materialized by default |                                                                                                                                                                                                              |
+| `float128` / `decimal128` / `decimal256`       | `double` (planned/extension)    | lossy conversion policy for high-precision extension dtypes; exact payload preservation requires an explicit extension-vector path                                                                           |
+| plugin dtypes                                  | not yet materialized by default |                                                                                                                                                                                                              |
 
 `Rzarrs_int64` and `Rzarrs_uint64` methods compute through Rust-side
 checked integer paths, not by converting to R `double`. Results stay
 fixed-width: overflow or operations that are not integer-preserving
 error instead of silently widening or losing precision.
 
-Unsupported extension/nested types (`float128`, unknown time extensions,
-`optional[...]`, `list[...]`, `struct{...}`, etc.) are reported via an
-informative error with a planned materialization policy rather than
-silently cast. Temporal extension dtypes use exact `Rzarrs_int64` values
+Unsupported extension/nested types (unknown plugin dtypes, unknown time
+extensions, `optional[...]`, `list[...]`, `struct{...}`, etc.) are
+reported via an informative error with a planned materialization policy
+rather than silently cast. High-precision extension dtypes (`float128`,
+`decimal128`, `decimal256`) use a documented lossy-double policy for
+now; exact payload preservation requires a future extension-vector
+materializer. Temporal extension dtypes use exact `Rzarrs_int64` values
 with R attributes; future list/struct materialization should follow the
 Arrow/nanoarrow model: validity, offsets, and child arrays, not
 flattened ad hoc R lists.
@@ -81,9 +85,12 @@ A Rust toolchain (cargo + rustc \>= 1.82) and GNU Make are required at
 install time.
 
 Default Rust features are `aws`, `fs`, and `zip`: HTTP/HTTPS, local
-`file://` stores via `ZarrObjectStore`, S3, and local `.zarr.zip` VCF
-Zarr archives work out of the box. Source installs can enable more
-providers with configure arguments:
+`file://` stores via `ZarrObjectStore`, S3, and local `.zarr.zip`
+archives work out of the box. Common Zarr V3 codecs, including `bytes`,
+`gzip`, `zstd`, `crc32c`, `sharding_indexed`, `transpose`, and `blosc`,
+are compiled in; use `codec_capabilities()` or
+`arr$codec_capabilities()` to inspect support. Source installs can
+enable more providers with configure arguments:
 
 ``` r
 # Enable GCS in addition to defaults
