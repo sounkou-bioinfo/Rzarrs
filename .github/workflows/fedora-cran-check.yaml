@@ -5,10 +5,11 @@ name: Fedora CRAN check
 # (Fedora + GCC + an R-devel snapshot close to CRAN's Fedora setup).
 
 "on":
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

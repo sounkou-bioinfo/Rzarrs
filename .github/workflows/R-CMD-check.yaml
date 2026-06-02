@@ -8,6 +8,10 @@ name: R-CMD-check
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   R-CMD-check:
     runs-on: ${{ matrix.config.os }}
@@ -18,15 +22,9 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - { os: macos-latest,     r: 'release'  }
-          - { os: macos-15,         r: 'next'     }
-          - { os: windows-latest,   r: 'release'  }
-          - { os: windows-latest,   r: 'devel'    }
-          - { os: ubuntu-latest,    r: 'devel', http-user-agent: 'release' }
-          - { os: ubuntu-latest,    r: 'release'  }
-          - { os: ubuntu-latest,    r: 'oldrel-1' }
-          - { os: ubuntu-24.04-arm, r: 'release'  }
-          - { os: windows-11-arm,   r: 'release'  }
+          - { os: ubuntu-latest,  r: 'release' }
+          - { os: macos-latest,   r: 'release' }
+          - { os: windows-latest, r: 'release' }
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}

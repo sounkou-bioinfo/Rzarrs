@@ -11,6 +11,9 @@ fixture <- function(name) {
 
 int32_path   <- fixture("int32.zarr")
 float32_path <- fixture("float32.zarr")
+uint8_path <- fixture("uint8.zarr")
+complex64_path <- fixture("complex64.zarr")
+complex128_path <- fixture("complex128.zarr")
 
 # ---------------------------------------------------------------------------
 # ZarrStore
@@ -63,6 +66,18 @@ expect_true(is.integer(sub))
 expect_equal(as.vector(sub), c(1L, 7L, 2L, 8L, 3L, 9L))
 
 # ---------------------------------------------------------------------------
+# uint8 bundled fixture — numeric unsigned byte values become R integers
+# ---------------------------------------------------------------------------
+
+u8 <- ZarrArray$open(ZarrStore$open(uint8_path), "/")
+expect_equal(u8$dtype(), "uint8")
+u8data <- u8$retrieve(NULL, NULL)
+expect_true(is.integer(u8data))
+expect_equal(dim(u8data), c(4L, 6L))
+expect_equal(u8data[1L, 1L], 1L)
+expect_equal(u8data[4L, 6L], 24L)
+
+# ---------------------------------------------------------------------------
 # float32 bundled fixture
 # ---------------------------------------------------------------------------
 
@@ -73,6 +88,38 @@ expect_true(is.double(fdata))
 expect_equal(dim(fdata), c(4L, 6L))
 expect_equal(fdata[1L, 1L], 1.0)
 expect_equal(fdata[4L, 6L], 24.0)
+
+# ---------------------------------------------------------------------------
+# complex bundled fixtures
+# ---------------------------------------------------------------------------
+
+c64 <- ZarrArray$open(ZarrStore$open(complex64_path), "/")
+expect_equal(c64$dtype(), "complex64")
+c64data <- c64$retrieve(NULL, NULL)
+expect_true(is.complex(c64data))
+expect_equal(dim(c64data), c(4L, 6L))
+expect_equal(c64data[1L, 1L], 1 - 1i)
+expect_equal(c64data[4L, 6L], 24 - 24i)
+expect_true(inherits(c64data, "Rzarrs_complex64"))
+expect_warning(c64_real <- as.double(c64data), "imaginary part is discarded")
+expect_equal(dim(c64_real), dim(c64data))
+expect_equal(c64_real[1L, 1L], 1)
+expect_equal(sum(c64data), 300 - 300i)
+expect_error(min(c64data), "Summary operation 'min' is not implemented for Rzarrs_complex64")
+
+c128 <- ZarrArray$open(ZarrStore$open(complex128_path), "/")
+expect_equal(c128$dtype(), "complex128")
+c128data <- c128$retrieve(NULL, NULL)
+expect_true(is.complex(c128data))
+expect_true(inherits(c128data, "Rzarrs_complex128"))
+expect_equal(dim(c128data), c(4L, 6L))
+expect_equal(c128data[1L, 1L], 1 - 1i)
+expect_equal(c128data[4L, 6L], 24 - 24i)
+expect_warning(c128_real <- as.double(c128data), "imaginary part is discarded")
+expect_equal(dim(c128_real), dim(c128data))
+expect_equal(c128_real[1L, 1L], 1)
+expect_equal(sum(c128data), 300 - 300i)
+expect_error(min(c128data), "Summary operation 'min' is not implemented for Rzarrs_complex128")
 
 # ---------------------------------------------------------------------------
 # Rust-side R indexing validation

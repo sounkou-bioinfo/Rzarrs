@@ -1,0 +1,43 @@
+# Fixture generation
+
+The bundled fixtures under `inst/testdata/` are generated explicitly by scripts in this directory. They are intentionally tiny, deterministic, and dependency-light so Rust/R layout and dtype behavior can be checked without network access.
+
+## Primitive Zarr arrays
+
+```sh
+Rscript tools/make_fixtures.R
+```
+
+Creates:
+
+- `inst/testdata/int32.zarr` — 4 x 6 `int32`, chunks 2 x 3, values 1..24
+- `inst/testdata/uint8.zarr` — 4 x 6 `uint8`, chunks 2 x 3, values 1..24; Rzarrs reads this as R `integer`, not `raw`
+- `inst/testdata/float32.zarr` — 4 x 6 `float32`, chunks 2 x 3, values 1..24
+- `inst/testdata/complex64.zarr` — 4 x 6 `complex64`, chunks 2 x 3, values `n - n*i`
+- `inst/testdata/complex128.zarr` — 4 x 6 `complex128`, chunks 2 x 3, values `n - n*i`
+
+The script writes Zarr V3 metadata and bytes-codec chunks directly in base R. No Rarr, reticulate, or Python dependency is required for these core fixtures.
+
+## VCF Zarr fixtures
+
+```sh
+Rscript tools/make_vcf_fixtures.R
+```
+
+Creates the VCF Zarr version fixtures under `inst/testdata/vcf_zarr/`, including the local `.zarr.zip` archive used by README/tests.
+
+## Optional Rarr interop check
+
+`Rarr` is listed in `Suggests` for optional interoperability checks. It is a Bioconductor package; use a build with Zarr V3 support if you want to run the interop script:
+
+```r
+BiocManager::install("Rarr")
+```
+
+Then run:
+
+```sh
+Rscript tools/check_rarr_interop.R
+```
+
+This compares selected package fixtures as read by Rzarrs and Rarr. The core fixture scripts above remain base-R so package tests do not depend on Rarr being present.

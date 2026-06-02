@@ -100,11 +100,24 @@ elif [ -n "${NO_DEFAULT_FEATURES}" ]; then
   FEATURE_FLAGS="${NO_DEFAULT_FEATURES}"
 fi
 
-# Rtools target selection.  GitHub Windows ARM64 runners set PROCESSOR_ARCHITECTURE=ARM64.
-case "${PROCESSOR_ARCHITECTURE:-$(uname -m)}" in
-  ARM64|arm64|aarch64)
+# Rtools target selection.
+if command -v Rscript >/dev/null 2>&1; then
+  R_PLATFORM="$(Rscript -e 'cat(R.version$platform)' 2>/dev/null)"
+  R_PLATFORM="$(printf '%s' "${R_PLATFORM}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+else
+  R_PLATFORM=""
+fi
+
+PROCESSOR="${R_PLATFORM:-${PROCESSOR_ARCHITECTURE:-$(uname -m)}}"
+
+case "${PROCESSOR}" in
+  *aarch64*|*arm64*|*aarch64-pc-windows-gnullvm*)
     TARGET="aarch64-pc-windows-gnullvm"
     CARGO_LINKER="aarch64-w64-mingw32.static.posix-gcc.exe"
+    ;;
+  *x86_64*|*amd64*|*x64*)
+    TARGET="x86_64-pc-windows-gnu"
+    CARGO_LINKER="x86_64-w64-mingw32.static.posix-gcc.exe"
     ;;
   *)
     TARGET="x86_64-pc-windows-gnu"

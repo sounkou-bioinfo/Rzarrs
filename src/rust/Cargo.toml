@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["staticlib", "lib"]
 
 [dependencies]
-savvy = { version = "0.10.2", default-features = false }
+savvy = { version = "0.10.2", default-features = false, features = ["complex"] }
 zarrs = { version = "0.23", default-features = false, features = [
     "filesystem",
     "async",
@@ -24,13 +24,17 @@ zarrs_object_store = { version = "0.6", default-features = false }
 url = "2"
 tokio = { version = "1", default-features = false, features = ["rt", "time"] }
 serde_json = "1"
+dashu-int = "0.4.2"
+dashu-float = "0.4.4"
+num-complex = "0.4.3"
 
 [features]
-default = ["aws", "zip"]
+default = ["aws", "zip", "fs"]
 http = ["zarrs_object_store/http"]
 aws = ["http", "zarrs_object_store/aws"]
 gcp = ["http", "zarrs_object_store/gcp"]
 azure = ["http", "zarrs_object_store/azure"]
+fs = ["zarrs_object_store/fs"]
 cloud = ["aws", "gcp", "azure"]
 zip = ["dep:zarrs_zip", "dep:rc-zip"]
 altrep = ["savvy/altrep"]

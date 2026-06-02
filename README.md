@@ -18,26 +18,46 @@ can be enabled when installing from source.
 
 ## Overview
 
-Rzarrs exposes four savvy-backed reference objects:
+Rzarrs uses the Rust [`savvy`](https://github.com/yutannihilation/savvy)
+crate for the R/Rust boundary and exposes four savvy-backed reference
+objects:
 
-| Object            | Purpose                                                                          |
-|-------------------|----------------------------------------------------------------------------------|
-| `ZarrStore`       | Local filesystem store                                                           |
-| `ZarrObjectStore` | HTTP/HTTPS and S3 by default; GCS/Azure Blob when enabled at source-install time |
-| `ZarrGroup`       | A group node within a store (attributes + child listing)                         |
-| `ZarrArray`       | A single array within any store                                                  |
+| Object            | Purpose                                                                                      |
+|-------------------|----------------------------------------------------------------------------------------------|
+| `ZarrStore`       | Local filesystem store                                                                       |
+| `ZarrObjectStore` | `file://`, HTTP/HTTPS, and S3 by default; GCS/Azure Blob when enabled at source-install time |
+| `ZarrGroup`       | A group node within a store (attributes + child listing)                                     |
+| `ZarrArray`       | A single array within any store                                                              |
 
-Zarr dtypes are mapped to R types automatically:
+Zarr dtypes are mapped to R types automatically on read:
 
-| Zarr dtype                 | R type      | Notes                                        |
-|----------------------------|-------------|----------------------------------------------|
-| `float32` / `float64`      | `double`    | NaN, Inf, -Inf preserved as-is               |
-| `int8` / `int16` / `int32` | `integer`   | `i32::MIN` → `NA_integer_`                   |
-| `int64`                    | `double`    | exact to 2^53                                |
-| `uint8` / `uint16`         | `integer`   | always fits                                  |
-| `uint32` / `uint64`        | `double`    |                                              |
-| `bool`                     | `logical`   |                                              |
-| `string`                   | `character` | variable-length UTF-8 via `vlen-bytes` codec |
+| Zarr dtype                             | R type                          | Notes                                                                                                                                                                                                        |
+|----------------------------------------|---------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `float32` / `float64`                  | `double`                        | IEEE `NaN`/`Inf`/`-Inf` preserved                                                                                                                                                                            |
+| `int8` / `int16` / `int32`             | `integer`                       | `i32::MIN` → `NA_integer_`                                                                                                                                                                                   |
+| `int64`                                | `Rzarrs_int64`                  | lossless `format()`/`as.character()`; `as.double()` only when exactly representable; comparisons, checked `+`, `-`, `*`, `min()`, `max()`, `range()`, `sum()`, `prod()`, `abs()`, and `sign()` are supported |
+| `uint8` / `uint16`                     | `integer`                       | always fits                                                                                                                                                                                                  |
+| `uint32`                               | `double`                        | exact for all `uint32` values                                                                                                                                                                                |
+| `uint64`                               | `Rzarrs_uint64`                 | lossless `format()`/`as.character()`; `as.double()` only when exactly representable; comparisons, checked `+`, `-`, `*`, `min()`, `max()`, `range()`, `sum()`, `prod()`, `abs()`, and `sign()` are supported |
+| `bool`                                 | `logical`                       |                                                                                                                                                                                                              |
+| `string`, `utf8`, `vlen-utf8`          | `character`                     | variable-length UTF-8                                                                                                                                                                                        |
+| `numpy.datetime64`                     | `Rzarrs_int64`                  | exact int64 payload with R attributes `zarr_dtype`, `unit`, and `scale_factor`; `i64::MIN` is missing/NaT; scale explicitly before POSIXct coercion                                                          |
+| `numpy.timedelta64`                    | `Rzarrs_int64`                  | exact int64 payload with R attributes `zarr_dtype`, `unit`, and `scale_factor`; `i64::MIN` is missing/NaT; scale explicitly before seconds coercion                                                          |
+| `complex64` / `complex128`             | `complex`                       | R native complex vector; `complex64` components are promoted to double                                                                                                                                       |
+| `float16` / `float128` / plugin dtypes | not yet materialized by default |                                                                                                                                                                                                              |
+
+`Rzarrs_int64` and `Rzarrs_uint64` methods compute through Rust-side
+checked integer paths, not by converting to R `double`. Results stay
+fixed-width: overflow or operations that are not integer-preserving
+error instead of silently widening or losing precision.
+
+Unsupported extension/nested types (`float16`, `float128`, unknown time
+extensions, `optional[...]`, `list[...]`, `struct{...}`, etc.) are
+reported via an informative error with a planned materialization policy
+rather than silently cast. Temporal extension dtypes use exact
+`Rzarrs_int64` values with R attributes; future list/struct
+materialization should follow the Arrow/nanoarrow model: validity,
+offsets, and child arrays, not flattened ad hoc R lists.
 
 Indices are **1-based and inclusive** on both ends — the same convention
 as all other R array operations.
@@ -60,9 +80,10 @@ install.packages(
 A Rust toolchain (cargo + rustc \>= 1.82) and GNU Make are required at
 install time.
 
-Default Rust features are `aws` and `zip`: HTTP/HTTPS, S3, and local
-`.zarr.zip` VCF Zarr archives work out of the box. Source installs can
-enable more providers with configure arguments:
+Default Rust features are `aws`, `fs`, and `zip`: HTTP/HTTPS, local
+`file://` stores via `ZarrObjectStore`, S3, and local `.zarr.zip` VCF
+Zarr archives work out of the box. Source installs can enable more
+providers with configure arguments:
 
 ``` r
 # Enable GCS in addition to defaults
@@ -166,23 +187,23 @@ standard provider environment variables before calling `open()`:
 | Azure Blob   | `AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_ACCESS_KEY` or `AZURE_CLIENT_ID` + `AZURE_CLIENT_SECRET`               |
 
 ``` r
-# Public HTTPS endpoint — no credentials needed
-os   <- ZarrObjectStore$open(
-  "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240.zarr"
-)
-oarr <- ZarrArray$open_object_store(os, "/0")
+path <- system.file("testdata", "int32.zarr", package = "Rzarrs")
+os <- ZarrObjectStore$open(sprintf("file:///%s", path))
+oarr <- ZarrArray$open_object_store(os, "/")
 oarr$dtype()
-#> [1] "uint16"
-oarr$shape()   # t, z, y, x  (4-D: 2 timepoints × 236 Z-slices × 275 × 271)
-#> [1]   2 236 275 271
+#> [1] "int32"
+oarr$shape()
+#> [1] 4 6
 
-# Retrieve a small spatial patch: first time point, first Z-slice,
-# first 8×8 pixels in Y/X — indices are 1-based inclusive
-patch <- oarr$retrieve(c(1L, 1L, 1L, 1L), c(1L, 1L, 8L, 8L))
-dim(patch)
-#> [1] 1 1 8 8
-range(patch)
-#> [1]  8 28
+data <- oarr$retrieve()
+dim(data)
+#> [1] 4 6
+head(data)
+#>      [,1] [,2] [,3] [,4] [,5] [,6]
+#> [1,]    1    2    3    4    5    6
+#> [2,]    7    8    9   10   11   12
+#> [3,]   13   14   15   16   17   18
+#> [4,]   19   20   21   22   23   24
 ```
 
 Cloud URLs use the same API; only the scheme and credentials differ:
@@ -308,7 +329,6 @@ zv_zip$genotypes(variants = 1:2, samples = 1:2)
 #> [1,]    0    1
 #> [2,]    1    1
 ```
-
 
 ## License
 

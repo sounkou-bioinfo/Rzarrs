@@ -6,15 +6,19 @@ mod altrep_async;
 
 use savvy::savvy;
 use savvy::{
-    NotAvailableValue, NullSexp, OwnedIntegerSexp, OwnedListSexp, OwnedLogicalSexp, OwnedRealSexp,
-    OwnedStringSexp, TypedSexp,
+    Complex64 as RComplex64, NotAvailableValue, NullSexp, OwnedComplexSexp, OwnedIntegerSexp,
+    OwnedListSexp, OwnedLogicalSexp, OwnedRealSexp, OwnedStringSexp, TypedSexp,
 };
+
+use dashu_int::{IBig, UBig};
+use num_complex::{Complex32, Complex64 as NumComplex64};
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use zarrs::array::Array;
 use zarrs::array::ArraySubset;
+use zarrs::array::data_type::{NumpyDateTime64DataType, NumpyTimeDelta64DataType, NumpyTimeUnit};
 use zarrs::filesystem::FilesystemStore;
 use zarrs::group::Group;
 use zarrs::node::NodeMetadata;
@@ -409,6 +413,18 @@ impl ZarrArray {
         Ok(out.into())
     }
 
+    /// Planned R materialization for this array's dtype.
+    ///
+    /// This does not read array data.  It reports whether the dtype can be
+    /// mapped to base R exactly, needs an explicit cast policy, or requires a
+    /// package-owned extension vector/list class.
+    ///
+    /// @returns A named list describing the dtype conversion policy.
+    /// @export
+    fn dtype_plan(&self) -> savvy::Result<savvy::Sexp> {
+        dtype_plan_to_sexp(self.inner.data_type().to_string().as_str())
+    }
+
     /// Dimension names, if any.
     ///
     /// @returns A character vector, or `NULL` if the array has no dimension names.
@@ -480,6 +496,56 @@ impl ZarrArray {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+fn scalar_string(value: &str) -> savvy::Result<OwnedStringSexp> {
+    let mut out = OwnedStringSexp::new(1)?;
+    out.set_elt(0, value)?;
+    Ok(out)
+}
+
+fn scalar_logical(value: bool) -> savvy::Result<OwnedLogicalSexp> {
+    let mut out = OwnedLogicalSexp::new(1)?;
+    out.set_elt(0, value)?;
+    Ok(out)
+}
+
+fn dtype_plan_to_sexp(dtype_name: &str) -> savvy::Result<savvy::Sexp> {
+    let canonical = dtype_name
+        .split(" / ")
+        .next()
+        .unwrap_or(dtype_name)
+        .to_string();
+    let plan = nested::plan_dtype(&canonical, nested::Integer64Policy::Int64Class);
+
+    let mut out = OwnedListSexp::new(9, true)?;
+    out.set_name_and_value(0, "dtype", scalar_string(&plan.dtype_name)?)?;
+    out.set_name_and_value(1, "r_type", scalar_string(&format!("{:?}", plan.r_type))?)?;
+    out.set_name_and_value(
+        2,
+        "precision",
+        scalar_string(&format!("{:?}", plan.precision))?,
+    )?;
+    out.set_name_and_value(3, "nullable", scalar_logical(plan.nullable)?)?;
+    out.set_name_and_value(4, "nested", scalar_logical(plan.nested)?)?;
+    out.set_name_and_value(5, "lossless", scalar_logical(plan.lossless)?)?;
+    out.set_name_and_value(
+        6,
+        "requires_explicit_cast",
+        scalar_logical(plan.requires_explicit_cast)?,
+    )?;
+    out.set_name_and_value(
+        7,
+        "extension_name",
+        scalar_string(plan.extension_name.as_deref().unwrap_or(""))?,
+    )?;
+    out.set_name_and_value(
+        8,
+        "note",
+        scalar_string(plan.note.as_deref().unwrap_or(""))?,
+    )?;
+
+    Ok(out.into())
+}
 
 fn coerce_to_i64_vec(s: savvy::Sexp, label: &str) -> savvy::Result<Vec<i64>> {
     match s.into_typed() {
@@ -593,12 +659,791 @@ fn ranges_to_i32_dims(ranges: &[std::ops::Range<u64>]) -> savvy::Result<Vec<i32>
     Ok(dims)
 }
 
+fn u64_dim_to_i32(value: u64, label: &str) -> savvy::Result<i32> {
+    if value > i32::MAX as u64 {
+        return Err(savvy::Error::new(&format!(
+            "{label} dimension length {value} exceeds R's i32 array-dim limit"
+        )));
+    }
+    Ok(value as i32)
+}
+
+fn usize_len_to_i32(value: usize, label: &str) -> savvy::Result<i32> {
+    if value > i32::MAX as usize {
+        return Err(savvy::Error::new(&format!(
+            "{label} length {value} exceeds R's i32 vector/dim limit"
+        )));
+    }
+    Ok(value as i32)
+}
+
+fn shape_to_i32_dims(shape: &[u64]) -> savvy::Result<Vec<i32>> {
+    shape
+        .iter()
+        .enumerate()
+        .map(|(i, &d)| u64_dim_to_i32(d, &format!("dimension {}", i + 1)))
+        .collect()
+}
+
 fn maybe_c_to_r_order<T: Clone>(data: Vec<T>, dims: &[i32]) -> Vec<T> {
     if dims.len() > 1 {
         c_to_r_order(&data, dims)
     } else {
         data
     }
+}
+
+const F64_SAFE_INTEGER_MAX_U64: u64 = 9_007_199_254_740_992; // 2^53
+
+fn ensure_u64_exact_as_r_double(value: u64, dtype: &str) -> savvy::Result<()> {
+    if value > F64_SAFE_INTEGER_MAX_U64 {
+        return Err(savvy::Error::new(&format!(
+            "{dtype} value {value} cannot be represented exactly as an R double; use an explicit uint64/string/extension-vector policy"
+        )));
+    }
+    Ok(())
+}
+
+fn scalar_real(value: f64) -> savvy::Result<OwnedRealSexp> {
+    let mut out = OwnedRealSexp::new(1)?;
+    out[0] = value;
+    Ok(out)
+}
+
+fn i64_to_bitpattern_real(data: &[i64]) -> savvy::Result<OwnedRealSexp> {
+    let mut out = OwnedRealSexp::new(data.len())?;
+    for (dst, &value) in out.as_mut_slice().iter_mut().zip(data.iter()) {
+        *dst = f64::from_bits(value as u64);
+    }
+    Ok(out)
+}
+
+fn u64_to_bitpattern_real(data: &[u64]) -> savvy::Result<OwnedRealSexp> {
+    let mut out = OwnedRealSexp::new(data.len())?;
+    for (dst, &value) in out.as_mut_slice().iter_mut().zip(data.iter()) {
+        *dst = f64::from_bits(value);
+    }
+    Ok(out)
+}
+
+fn i64_to_rzarrs_int64(data: &[i64]) -> savvy::Result<OwnedRealSexp> {
+    let mut out = i64_to_bitpattern_real(data)?;
+    out.set_class(["Rzarrs_int64"])?;
+    out.set_attrib("storage", scalar_string("i64-bitpattern")?.into())?;
+    Ok(out)
+}
+
+fn u64_to_rzarrs_uint64(data: &[u64]) -> savvy::Result<OwnedRealSexp> {
+    let mut out = u64_to_bitpattern_real(data)?;
+    out.set_class(["Rzarrs_uint64"])?;
+    out.set_attrib("storage", scalar_string("u64-bitpattern")?.into())?;
+    Ok(out)
+}
+
+fn set_time64_attrs(
+    out: &mut OwnedRealSexp,
+    dtype_name: &str,
+    unit: NumpyTimeUnit,
+    scale_factor: u32,
+) -> savvy::Result<()> {
+    out.set_class(["Rzarrs_int64"])?;
+    out.set_attrib("zarr_dtype", scalar_string(dtype_name)?.into())?;
+    out.set_attrib("unit", scalar_string(&unit.to_string())?.into())?;
+    out.set_attrib("scale_factor", scalar_real(f64::from(scale_factor))?.into())?;
+    out.set_attrib("storage", scalar_string("i64-bitpattern")?.into())?;
+    Ok(())
+}
+
+const F64_SAFE_INTEGER_MIN_I64: i64 = -9_007_199_254_740_992; // -2^53
+const F64_SAFE_INTEGER_MAX_I64: i64 = 9_007_199_254_740_992; // 2^53
+
+fn ensure_i64_exact_as_r_double(value: i64, dtype: &str) -> savvy::Result<()> {
+    if !(F64_SAFE_INTEGER_MIN_I64..=F64_SAFE_INTEGER_MAX_I64).contains(&value) {
+        return Err(savvy::Error::new(&format!(
+            "{dtype} value {value} cannot be represented exactly as an R double"
+        )));
+    }
+    Ok(())
+}
+
+fn has_class(x: &savvy::Sexp, class_name: &str) -> bool {
+    x.get_class()
+        .map(|classes| classes.iter().any(|class| *class == class_name))
+        .unwrap_or(false)
+}
+
+fn string_attr_first(x: &savvy::Sexp, attr: &str) -> savvy::Result<Option<String>> {
+    let Some(attr_value) = x.get_attrib(attr)? else {
+        return Ok(None);
+    };
+    match attr_value.into_typed() {
+        TypedSexp::String(v) => Ok(v.iter().next().map(|value| value.to_string())),
+        _ => Ok(None),
+    }
+}
+
+fn is_time64_sexp(x: &savvy::Sexp) -> savvy::Result<bool> {
+    Ok(matches!(
+        string_attr_first(x, "zarr_dtype")?.as_deref(),
+        Some("numpy.datetime64") | Some("numpy.timedelta64")
+    ))
+}
+
+fn dims_match_n(x_dims: Option<Vec<i32>>, y_dims: Option<Vec<i32>>, n: usize) -> Option<Vec<i32>> {
+    if let Some(dims) = x_dims {
+        if dims.iter().map(|&v| v as usize).product::<usize>() == n {
+            return Some(dims);
+        }
+    }
+    if let Some(dims) = y_dims {
+        if dims.iter().map(|&v| v as usize).product::<usize>() == n {
+            return Some(dims);
+        }
+    }
+    None
+}
+
+fn check_recyclable(x_len: usize, y_len: usize, type_name: &str) -> savvy::Result<usize> {
+    let n = x_len.max(y_len);
+    if n == 0 {
+        return Ok(0);
+    }
+    if x_len == 0 || y_len == 0 {
+        return Err(savvy::Error::new(&format!(
+            "cannot operate on zero-length and nonzero-length {type_name} vectors"
+        )));
+    }
+    Ok(n)
+}
+
+fn check_numeric_i64(x: f64, label: &str) -> savvy::Result<i64> {
+    if x.is_na() || !x.is_finite() {
+        return Err(savvy::Error::new(&format!(
+            "{label} cannot contain NA/NaN/Inf"
+        )));
+    }
+    if x.fract() != 0.0 {
+        return Err(savvy::Error::new(&format!(
+            "{label} must contain whole-number values"
+        )));
+    }
+    if x < F64_SAFE_INTEGER_MIN_I64 as f64 || x > F64_SAFE_INTEGER_MAX_I64 as f64 {
+        return Err(savvy::Error::new(&format!(
+            "{label} double value {x} is outside double's exact integer range; construct an Rzarrs_int64 vector explicitly"
+        )));
+    }
+    Ok(x as i64)
+}
+
+fn check_numeric_u64(x: f64, label: &str) -> savvy::Result<u64> {
+    if x.is_na() || !x.is_finite() {
+        return Err(savvy::Error::new(&format!(
+            "{label} cannot contain NA/NaN/Inf"
+        )));
+    }
+    if x.fract() != 0.0 {
+        return Err(savvy::Error::new(&format!(
+            "{label} must contain whole-number values"
+        )));
+    }
+    if x < 0.0 || x > F64_SAFE_INTEGER_MAX_U64 as f64 {
+        return Err(savvy::Error::new(&format!(
+            "{label} double value {x} is outside double's exact nonnegative integer range; construct an Rzarrs_uint64 vector explicitly"
+        )));
+    }
+    Ok(x as u64)
+}
+
+fn collect_i64_operand(x: savvy::Sexp, label: &str) -> savvy::Result<(Vec<i64>, bool)> {
+    if has_class(&x, "Rzarrs_uint64") {
+        return Err(savvy::Error::new(&format!(
+            "{label} is Rzarrs_uint64; use uint64 operations"
+        )));
+    }
+    let is_class = has_class(&x, "Rzarrs_int64");
+    let is_time = is_time64_sexp(&x)?;
+    match x.into_typed() {
+        TypedSexp::Real(v) if is_class => Ok((
+            v.as_slice()
+                .iter()
+                .map(|src| src.to_bits() as i64)
+                .collect(),
+            is_time,
+        )),
+        TypedSexp::Integer(v) => {
+            let mut out = Vec::with_capacity(v.len());
+            for &value in v.iter() {
+                if value.is_na() {
+                    return Err(savvy::Error::new(&format!("{label} cannot contain NA")));
+                }
+                out.push(value as i64);
+            }
+            Ok((out, false))
+        }
+        TypedSexp::Real(v) => {
+            let mut out = Vec::with_capacity(v.len());
+            for &value in v.iter() {
+                out.push(check_numeric_i64(value, label)?);
+            }
+            Ok((out, false))
+        }
+        _ => Err(savvy::Error::new(&format!(
+            "{label} must be Rzarrs_int64, integer, or exactly representable double"
+        ))),
+    }
+}
+
+fn collect_u64_operand(x: savvy::Sexp, label: &str) -> savvy::Result<Vec<u64>> {
+    if has_class(&x, "Rzarrs_int64") {
+        return Err(savvy::Error::new(&format!(
+            "{label} is Rzarrs_int64; use int64 operations"
+        )));
+    }
+    let is_class = has_class(&x, "Rzarrs_uint64");
+    match x.into_typed() {
+        TypedSexp::Real(v) if is_class => {
+            Ok(v.as_slice().iter().map(|src| src.to_bits()).collect())
+        }
+        TypedSexp::Integer(v) => {
+            let mut out = Vec::with_capacity(v.len());
+            for &value in v.iter() {
+                if value.is_na() {
+                    return Err(savvy::Error::new(&format!("{label} cannot contain NA")));
+                }
+                if value < 0 {
+                    return Err(savvy::Error::new(&format!(
+                        "{label} cannot contain negative values for uint64 operations"
+                    )));
+                }
+                out.push(value as u64);
+            }
+            Ok(out)
+        }
+        TypedSexp::Real(v) => {
+            let mut out = Vec::with_capacity(v.len());
+            for &value in v.iter() {
+                out.push(check_numeric_u64(value, label)?);
+            }
+            Ok(out)
+        }
+        _ => Err(savvy::Error::new(&format!(
+            "{label} must be Rzarrs_uint64, nonnegative integer, or exactly representable nonnegative double"
+        ))),
+    }
+}
+
+fn compare_i64(a: i64, b: i64, op: &str) -> savvy::Result<bool> {
+    match op {
+        "==" => Ok(a == b),
+        "!=" => Ok(a != b),
+        "<" => Ok(a < b),
+        "<=" => Ok(a <= b),
+        ">" => Ok(a > b),
+        ">=" => Ok(a >= b),
+        _ => Err(savvy::Error::new(&format!(
+            "unsupported int64 comparison '{op}'"
+        ))),
+    }
+}
+
+fn compare_u64(a: u64, b: u64, op: &str) -> savvy::Result<bool> {
+    match op {
+        "==" => Ok(a == b),
+        "!=" => Ok(a != b),
+        "<" => Ok(a < b),
+        "<=" => Ok(a <= b),
+        ">" => Ok(a > b),
+        ">=" => Ok(a >= b),
+        _ => Err(savvy::Error::new(&format!(
+            "unsupported uint64 comparison '{op}'"
+        ))),
+    }
+}
+
+fn checked_i64_arithmetic(a: i64, b: i64, op: &str) -> savvy::Result<i64> {
+    let result = match op {
+        "+" => IBig::from(a) + IBig::from(b),
+        "-" => IBig::from(a) - IBig::from(b),
+        "*" => IBig::from(a) * IBig::from(b),
+        _ => {
+            return Err(savvy::Error::new(&format!(
+                "operation '{op}' is not integer-preserving or not implemented for Rzarrs_int64"
+            )));
+        }
+    };
+    i64::try_from(&result).map_err(|_| {
+        savvy::Error::new(&format!(
+            "operation '{op}' overflows signed 64-bit range; explicit wider integer materialization is required"
+        ))
+    })
+}
+
+fn checked_u64_arithmetic(a: u64, b: u64, op: &str) -> savvy::Result<u64> {
+    let result = match op {
+        "+" => UBig::from(a) + UBig::from(b),
+        "-" => {
+            if a < b {
+                return Err(savvy::Error::new(
+                    "operation '-' would produce a negative value for Rzarrs_uint64",
+                ));
+            }
+            UBig::from(a) - UBig::from(b)
+        }
+        "*" => UBig::from(a) * UBig::from(b),
+        _ => {
+            return Err(savvy::Error::new(&format!(
+                "operation '{op}' is not integer-preserving or not implemented for Rzarrs_uint64"
+            )));
+        }
+    };
+    u64::try_from(&result).map_err(|_| {
+        savvy::Error::new(&format!(
+            "operation '{op}' overflows unsigned 64-bit range; explicit wider integer materialization is required"
+        ))
+    })
+}
+
+fn i64_bitpattern_to_strings(data: &[f64], time_na: bool) -> savvy::Result<OwnedStringSexp> {
+    let mut out = OwnedStringSexp::new(data.len())?;
+    for (i, &src) in data.iter().enumerate() {
+        let value = src.to_bits() as i64;
+        if time_na && value == i64::MIN {
+            out.set_na(i)?;
+        } else {
+            out.set_elt(i, &IBig::from(value).to_string())?;
+        }
+    }
+    Ok(out)
+}
+
+fn uint64_bitpattern_to_strings(data: &[f64]) -> savvy::Result<OwnedStringSexp> {
+    let mut out = OwnedStringSexp::new(data.len())?;
+    for (i, &src) in data.iter().enumerate() {
+        out.set_elt(i, &UBig::from(src.to_bits()).to_string())?;
+    }
+    Ok(out)
+}
+
+fn i64_bitpattern_to_double(data: &[f64], time_na: bool) -> savvy::Result<OwnedRealSexp> {
+    let mut out = OwnedRealSexp::new(data.len())?;
+    for (i, &src) in data.iter().enumerate() {
+        let value = src.to_bits() as i64;
+        if time_na && value == i64::MIN {
+            out.set_na(i)?;
+        } else {
+            ensure_i64_exact_as_r_double(value, "int64")?;
+            out[i] = value as f64;
+        }
+    }
+    Ok(out)
+}
+
+fn uint64_bitpattern_to_double(data: &[f64]) -> savvy::Result<OwnedRealSexp> {
+    let mut out = OwnedRealSexp::new(data.len())?;
+    for (i, &src) in data.iter().enumerate() {
+        let value = src.to_bits();
+        ensure_u64_exact_as_r_double(value, "uint64")?;
+        out[i] = value as f64;
+    }
+    Ok(out)
+}
+
+#[savvy]
+fn rzarrs_int64_values(x: savvy::Sexp) -> savvy::Result<savvy::Sexp> {
+    let dims = x.get_dim().map(|d| d.to_vec());
+    let time_na = is_time64_sexp(&x)?;
+    let mut out = match x.into_typed() {
+        TypedSexp::Real(v) => i64_bitpattern_to_strings(v.as_slice(), time_na)?,
+        _ => return Err(savvy::Error::new("expected a Rzarrs_int64 vector")),
+    };
+    if let Some(dims) = dims {
+        out.set_dim(&dims)?;
+    }
+    Ok(out.into())
+}
+
+#[savvy]
+fn rzarrs_uint64_values(x: savvy::Sexp) -> savvy::Result<savvy::Sexp> {
+    let dims = x.get_dim().map(|d| d.to_vec());
+    let mut out = match x.into_typed() {
+        TypedSexp::Real(v) => uint64_bitpattern_to_strings(v.as_slice())?,
+        _ => return Err(savvy::Error::new("expected a Rzarrs_uint64 vector")),
+    };
+    if let Some(dims) = dims {
+        out.set_dim(&dims)?;
+    }
+    Ok(out.into())
+}
+
+#[savvy]
+fn rzarrs_int64_to_double(x: savvy::Sexp) -> savvy::Result<savvy::Sexp> {
+    let dims = x.get_dim().map(|d| d.to_vec());
+    let time_na = is_time64_sexp(&x)?;
+    let mut out = match x.into_typed() {
+        TypedSexp::Real(v) => i64_bitpattern_to_double(v.as_slice(), time_na)?,
+        _ => return Err(savvy::Error::new("expected a Rzarrs_int64 vector")),
+    };
+    if let Some(dims) = dims {
+        out.set_dim(&dims)?;
+    }
+    Ok(out.into())
+}
+
+#[savvy]
+fn rzarrs_uint64_to_double(x: savvy::Sexp) -> savvy::Result<savvy::Sexp> {
+    let dims = x.get_dim().map(|d| d.to_vec());
+    let mut out = match x.into_typed() {
+        TypedSexp::Real(v) => uint64_bitpattern_to_double(v.as_slice())?,
+        _ => return Err(savvy::Error::new("expected a Rzarrs_uint64 vector")),
+    };
+    if let Some(dims) = dims {
+        out.set_dim(&dims)?;
+    }
+    Ok(out.into())
+}
+
+#[savvy]
+fn rzarrs_int64_is_na(x: savvy::Sexp) -> savvy::Result<savvy::Sexp> {
+    let dims = x.get_dim().map(|d| d.to_vec());
+    let time_na = is_time64_sexp(&x)?;
+    let data = match x.into_typed() {
+        TypedSexp::Real(v) => v
+            .as_slice()
+            .iter()
+            .map(|src| src.to_bits() as i64)
+            .collect::<Vec<_>>(),
+        _ => return Err(savvy::Error::new("expected a Rzarrs_int64 vector")),
+    };
+    let mut out = OwnedLogicalSexp::new(data.len())?;
+    for (i, value) in data.iter().enumerate() {
+        out.set_elt(i, time_na && *value == i64::MIN)?;
+    }
+    if let Some(dims) = dims {
+        out.set_dim(&dims)?;
+    }
+    Ok(out.into())
+}
+
+#[savvy]
+fn rzarrs_uint64_is_na(x: savvy::Sexp) -> savvy::Result<savvy::Sexp> {
+    let dims = x.get_dim().map(|d| d.to_vec());
+    let len = match x.into_typed() {
+        TypedSexp::Real(v) => v.len(),
+        _ => return Err(savvy::Error::new("expected a Rzarrs_uint64 vector")),
+    };
+    let mut out = OwnedLogicalSexp::new(len)?;
+    for i in 0..len {
+        out.set_elt(i, false)?;
+    }
+    if let Some(dims) = dims {
+        out.set_dim(&dims)?;
+    }
+    Ok(out.into())
+}
+
+#[savvy]
+fn rzarrs_int64_op(x: savvy::Sexp, y: savvy::Sexp, op: &str) -> savvy::Result<savvy::Sexp> {
+    let comparison = matches!(op, "==" | "!=" | "<" | "<=" | ">" | ">=");
+    let x_dims = x.get_dim().map(|d| d.to_vec());
+    let y_dims = y.get_dim().map(|d| d.to_vec());
+    let (x_values, x_time) = collect_i64_operand(x, "left operand")?;
+    let (y_values, y_time) = collect_i64_operand(y, "right operand")?;
+    let n = check_recyclable(x_values.len(), y_values.len(), "int64")?;
+    if n == 0 {
+        return if comparison {
+            Ok(OwnedLogicalSexp::new(0)?.into())
+        } else {
+            Ok(i64_to_rzarrs_int64(&[])?.into())
+        };
+    }
+
+    if comparison {
+        let mut out = OwnedLogicalSexp::new(n)?;
+        for i in 0..n {
+            let a = x_values[i % x_values.len()];
+            let b = y_values[i % y_values.len()];
+            if (x_time && a == i64::MIN) || (y_time && b == i64::MIN) {
+                out.set_na(i)?;
+            } else {
+                out.set_elt(i, compare_i64(a, b, op)?)?;
+            }
+        }
+        if let Some(dims) = dims_match_n(x_dims.clone(), y_dims.clone(), n) {
+            out.set_dim(&dims)?;
+        }
+        return Ok(out.into());
+    }
+
+    if x_time || y_time {
+        return Err(savvy::Error::new(
+            "arithmetic on numpy datetime64/timedelta64 int64 payloads is not implemented; scale explicitly first",
+        ));
+    }
+
+    let mut result = Vec::with_capacity(n);
+    for i in 0..n {
+        result.push(checked_i64_arithmetic(
+            x_values[i % x_values.len()],
+            y_values[i % y_values.len()],
+            op,
+        )?);
+    }
+    let mut out = i64_to_rzarrs_int64(&result)?;
+    if let Some(dims) = dims_match_n(x_dims, y_dims, n) {
+        out.set_dim(&dims)?;
+    }
+    Ok(out.into())
+}
+
+#[savvy]
+fn rzarrs_uint64_op(x: savvy::Sexp, y: savvy::Sexp, op: &str) -> savvy::Result<savvy::Sexp> {
+    let comparison = matches!(op, "==" | "!=" | "<" | "<=" | ">" | ">=");
+    let x_dims = x.get_dim().map(|d| d.to_vec());
+    let y_dims = y.get_dim().map(|d| d.to_vec());
+    let x_values = collect_u64_operand(x, "left operand")?;
+    let y_values = collect_u64_operand(y, "right operand")?;
+    let n = check_recyclable(x_values.len(), y_values.len(), "uint64")?;
+    if n == 0 {
+        return if comparison {
+            Ok(OwnedLogicalSexp::new(0)?.into())
+        } else {
+            Ok(u64_to_rzarrs_uint64(&[])?.into())
+        };
+    }
+
+    if comparison {
+        let mut out = OwnedLogicalSexp::new(n)?;
+        for i in 0..n {
+            out.set_elt(
+                i,
+                compare_u64(
+                    x_values[i % x_values.len()],
+                    y_values[i % y_values.len()],
+                    op,
+                )?,
+            )?;
+        }
+        if let Some(dims) = dims_match_n(x_dims.clone(), y_dims.clone(), n) {
+            out.set_dim(&dims)?;
+        }
+        return Ok(out.into());
+    }
+
+    let mut result = Vec::with_capacity(n);
+    for i in 0..n {
+        result.push(checked_u64_arithmetic(
+            x_values[i % x_values.len()],
+            y_values[i % y_values.len()],
+            op,
+        )?);
+    }
+    let mut out = u64_to_rzarrs_uint64(&result)?;
+    if let Some(dims) = dims_match_n(x_dims, y_dims, n) {
+        out.set_dim(&dims)?;
+    }
+    Ok(out.into())
+}
+
+#[savvy]
+fn rzarrs_int64_summary(x: savvy::Sexp, op: &str, _na_rm: bool) -> savvy::Result<savvy::Sexp> {
+    if is_time64_sexp(&x)? {
+        return Err(savvy::Error::new(
+            "Summary is not implemented for numpy datetime64/timedelta64 int64 payloads",
+        ));
+    }
+    let (values, _) = collect_i64_operand(x, "x")?;
+    match op {
+        "sum" => {
+            let mut acc = IBig::from(0);
+            for value in values {
+                acc += IBig::from(value);
+            }
+            let value = i64::try_from(&acc).map_err(|_| {
+                savvy::Error::new(
+                    "sum overflows signed 64-bit range; explicit wider integer materialization is required",
+                )
+            })?;
+            Ok(i64_to_rzarrs_int64(&[value])?.into())
+        }
+        "prod" => {
+            let mut acc = IBig::from(1);
+            for value in values {
+                acc *= IBig::from(value);
+            }
+            let value = i64::try_from(&acc).map_err(|_| {
+                savvy::Error::new(
+                    "prod overflows signed 64-bit range; explicit wider integer materialization is required",
+                )
+            })?;
+            Ok(i64_to_rzarrs_int64(&[value])?.into())
+        }
+        "min" | "max" | "range" => {
+            if values.is_empty() {
+                return Err(savvy::Error::new(&format!(
+                    "{op} is undefined for empty Rzarrs_int64 vectors"
+                )));
+            }
+            let min = *values.iter().min().unwrap();
+            let max = *values.iter().max().unwrap();
+            match op {
+                "min" => Ok(i64_to_rzarrs_int64(&[min])?.into()),
+                "max" => Ok(i64_to_rzarrs_int64(&[max])?.into()),
+                _ => Ok(i64_to_rzarrs_int64(&[min, max])?.into()),
+            }
+        }
+        _ => Err(savvy::Error::new(&format!(
+            "Summary operation '{op}' is not implemented for Rzarrs_int64"
+        ))),
+    }
+}
+
+#[savvy]
+fn rzarrs_uint64_summary(x: savvy::Sexp, op: &str, _na_rm: bool) -> savvy::Result<savvy::Sexp> {
+    let values = collect_u64_operand(x, "x")?;
+    match op {
+        "sum" => {
+            let mut acc = UBig::from(0u8);
+            for value in values {
+                acc += UBig::from(value);
+            }
+            let value = u64::try_from(&acc).map_err(|_| {
+                savvy::Error::new(
+                    "sum overflows unsigned 64-bit range; explicit wider integer materialization is required",
+                )
+            })?;
+            Ok(u64_to_rzarrs_uint64(&[value])?.into())
+        }
+        "prod" => {
+            let mut acc = UBig::from(1u8);
+            for value in values {
+                acc *= UBig::from(value);
+            }
+            let value = u64::try_from(&acc).map_err(|_| {
+                savvy::Error::new(
+                    "prod overflows unsigned 64-bit range; explicit wider integer materialization is required",
+                )
+            })?;
+            Ok(u64_to_rzarrs_uint64(&[value])?.into())
+        }
+        "min" | "max" | "range" => {
+            if values.is_empty() {
+                return Err(savvy::Error::new(&format!(
+                    "{op} is undefined for empty Rzarrs_uint64 vectors"
+                )));
+            }
+            let min = *values.iter().min().unwrap();
+            let max = *values.iter().max().unwrap();
+            match op {
+                "min" => Ok(u64_to_rzarrs_uint64(&[min])?.into()),
+                "max" => Ok(u64_to_rzarrs_uint64(&[max])?.into()),
+                _ => Ok(u64_to_rzarrs_uint64(&[min, max])?.into()),
+            }
+        }
+        _ => Err(savvy::Error::new(&format!(
+            "Summary operation '{op}' is not implemented for Rzarrs_uint64"
+        ))),
+    }
+}
+
+#[savvy]
+fn rzarrs_int64_math(x: savvy::Sexp, op: &str) -> savvy::Result<savvy::Sexp> {
+    if is_time64_sexp(&x)? {
+        return Err(savvy::Error::new(
+            "Math is not implemented for numpy datetime64/timedelta64 int64 payloads",
+        ));
+    }
+    let (values, _) = collect_i64_operand(x, "x")?;
+    match op {
+        "abs" => {
+            let mut out = Vec::with_capacity(values.len());
+            for value in values {
+                let abs = if value < 0 {
+                    -IBig::from(value)
+                } else {
+                    IBig::from(value)
+                };
+                out.push(i64::try_from(&abs).map_err(|_| {
+                    savvy::Error::new("abs overflows signed 64-bit range for -9223372036854775808")
+                })?);
+            }
+            Ok(i64_to_rzarrs_int64(&out)?.into())
+        }
+        "sign" => {
+            let mut out = OwnedIntegerSexp::new(values.len())?;
+            for (i, value) in values.iter().enumerate() {
+                out[i] = if *value > 0 {
+                    1
+                } else if *value < 0 {
+                    -1
+                } else {
+                    0
+                };
+            }
+            Ok(out.into())
+        }
+        _ => Err(savvy::Error::new(&format!(
+            "Math operation '{op}' is not integer-preserving or not implemented for Rzarrs_int64"
+        ))),
+    }
+}
+
+#[savvy]
+fn rzarrs_uint64_math(x: savvy::Sexp, op: &str) -> savvy::Result<savvy::Sexp> {
+    let values = collect_u64_operand(x, "x")?;
+    match op {
+        "abs" => Ok(u64_to_rzarrs_uint64(&values)?.into()),
+        "sign" => {
+            let mut out = OwnedIntegerSexp::new(values.len())?;
+            for (i, value) in values.iter().enumerate() {
+                out[i] = if *value == 0 { 0 } else { 1 };
+            }
+            Ok(out.into())
+        }
+        _ => Err(savvy::Error::new(&format!(
+            "Math operation '{op}' is not integer-preserving or not implemented for Rzarrs_uint64"
+        ))),
+    }
+}
+
+fn retrieve_numpy_datetime64(
+    array: &Array<dyn ReadableStorageTraits>,
+    subset: &ArraySubset,
+    dims: &[i32],
+) -> savvy::Result<savvy::Sexp> {
+    let dt = array
+        .data_type()
+        .downcast_ref::<NumpyDateTime64DataType>()
+        .ok_or_else(|| savvy::Error::new("internal error: expected numpy.datetime64 dtype"))?;
+    let data: Vec<i64> = array
+        .retrieve_array_subset::<Vec<i64>>(subset)
+        .map_err(|e| savvy::Error::new(&e.to_string()))?;
+    let data = maybe_c_to_r_order(data, dims);
+    let mut out = i64_to_bitpattern_real(&data)?;
+    set_time64_attrs(&mut out, "numpy.datetime64", dt.unit, dt.scale_factor.get())?;
+    Ok(out.into())
+}
+
+fn retrieve_numpy_timedelta64(
+    array: &Array<dyn ReadableStorageTraits>,
+    subset: &ArraySubset,
+    dims: &[i32],
+) -> savvy::Result<savvy::Sexp> {
+    let dt = array
+        .data_type()
+        .downcast_ref::<NumpyTimeDelta64DataType>()
+        .ok_or_else(|| savvy::Error::new("internal error: expected numpy.timedelta64 dtype"))?;
+    let data: Vec<i64> = array
+        .retrieve_array_subset::<Vec<i64>>(subset)
+        .map_err(|e| savvy::Error::new(&e.to_string()))?;
+    let data = maybe_c_to_r_order(data, dims);
+    let mut out = i64_to_bitpattern_real(&data)?;
+    set_time64_attrs(
+        &mut out,
+        "numpy.timedelta64",
+        dt.unit,
+        dt.scale_factor.get(),
+    )?;
+    Ok(out.into())
 }
 
 fn retrieve_typed(
@@ -679,10 +1524,7 @@ fn retrieve_typed(
                 .retrieve_array_subset::<Vec<i64>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
             let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedRealSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() {
-                out[i] = v as f64;
-            }
+            let out = i64_to_rzarrs_int64(&data)?;
             Ok(out.into())
         }
 
@@ -727,10 +1569,45 @@ fn retrieve_typed(
                 .retrieve_array_subset::<Vec<u64>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
             let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedRealSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() {
-                out[i] = v as f64;
+            let out = u64_to_rzarrs_uint64(&data)?;
+            Ok(out.into())
+        }
+
+        "complex64" => {
+            let data: Vec<Complex32> = array
+                .retrieve_array_subset::<Vec<Complex32>>(subset)
+                .map_err(|e| savvy::Error::new(&e.to_string()))?;
+            let data = maybe_c_to_r_order(data, dims);
+            let mut out = OwnedComplexSexp::new(n)?;
+            for (i, value) in data.iter().enumerate() {
+                out.set_elt(
+                    i,
+                    RComplex64 {
+                        re: f64::from(value.re),
+                        im: f64::from(value.im),
+                    },
+                )?;
             }
+            out.set_class(["Rzarrs_complex64", "complex"])?;
+            Ok(out.into())
+        }
+
+        "complex128" => {
+            let data: Vec<NumComplex64> = array
+                .retrieve_array_subset::<Vec<NumComplex64>>(subset)
+                .map_err(|e| savvy::Error::new(&e.to_string()))?;
+            let data = maybe_c_to_r_order(data, dims);
+            let mut out = OwnedComplexSexp::new(n)?;
+            for (i, value) in data.iter().enumerate() {
+                out.set_elt(
+                    i,
+                    RComplex64 {
+                        re: value.re,
+                        im: value.im,
+                    },
+                )?;
+            }
+            out.set_class(["Rzarrs_complex128", "complex"])?;
             Ok(out.into())
         }
 
@@ -758,9 +1635,20 @@ fn retrieve_typed(
             Ok(out.into())
         }
 
-        other => Err(savvy::Error::new(&format!(
-            "dtype '{other}' is not yet supported by Rzarrs"
-        ))),
+        "numpy.datetime64" => retrieve_numpy_datetime64(array, subset, dims),
+
+        "numpy.timedelta64" => retrieve_numpy_timedelta64(array, subset, dims),
+
+        other => {
+            let plan = nested::plan_dtype(other, nested::Integer64Policy::Int64Class);
+            Err(savvy::Error::new(&format!(
+                "dtype '{other}' is not yet materialized by Rzarrs; planned r_type={:?}, precision={:?}, requires_explicit_cast={}, note={}",
+                plan.r_type,
+                plan.precision,
+                plan.requires_explicit_cast,
+                plan.note.as_deref().unwrap_or("none")
+            )))
+        }
     }
 }
 
@@ -836,7 +1724,23 @@ fn json_to_sexp(v: &serde_json::Value) -> savvy::Result<savvy::Sexp> {
 // ZarrVcf — VCF Zarr reader
 // ---------------------------------------------------------------------------
 
-/// A high-level reader for VCF Zarr stores (spec versions 0.1–0.4).
+/// High-level VCF Zarr reader
+///
+/// `ZarrVcf$open(x)` opens a VCF Zarr store (spec versions 0.1–0.4) and
+/// returns an instance with methods to access variant, sample, and genotype data.
+///
+/// @section Methods:
+/// \describe{
+///   \item{`$open(x)`}{Open a VCF Zarr store from a path, URL, `ZarrStore`, or `ZarrObjectStore`.}
+///   \item{`$version()`}{VCF Zarr spec version string.}
+///   \item{`$n_variants()`, `$n_samples()`}{Number of variants and samples.}
+///   \item{`$samples()`, `$contigs()`, `$filters()`}{Character vectors of sample IDs, contig names, filter IDs.}
+///   \item{`$fields()`}{Available array names.}
+///   \item{`$variant_position()`, `$variant_contig()`, `$variant_allele()`}{Per-variant data.}
+///   \item{`$genotypes(variants, samples)`}{3-D array (variants × samples × ploidy) of integer genotypes.}
+///   \item{`$call_genotype_phased(variants, samples)`}{Boolean phased matrix.}
+///   \item{`$variant(name)`, `$call(name)`}{Generic accessor for `variant_<name>` / `call_<name>` arrays.}
+/// }
 ///
 /// @export
 #[savvy]
@@ -891,7 +1795,7 @@ fn init_vcf_from_store(store: Arc<dyn ReadListStorage>) -> savvy::Result<ZarrVcf
         if let Ok(arr) = Array::open(storage, "/variant_position") {
             let shape = arr.shape();
             if !shape.is_empty() {
-                shape[0] as i32
+                u64_dim_to_i32(shape[0], "variant")?
             } else {
                 0
             }
@@ -925,7 +1829,7 @@ fn init_vcf_from_store(store: Arc<dyn ReadListStorage>) -> savvy::Result<ZarrVcf
             })
             .unwrap_or_default()
     };
-    let n_samples = samples.len() as i32;
+    let n_samples = usize_len_to_i32(samples.len(), "sample")?;
 
     // contigs
     let contigs = if array_names.contains(&"contig_id".to_string()) {
@@ -1257,23 +2161,7 @@ impl ZarrVcf {
     /// @returns A character vector with `dim` attribute `[n_variants, n_alleles]`.
     /// @export
     fn variant_allele(&self) -> savvy::Result<savvy::Sexp> {
-        let storage: Arc<dyn ReadableStorageTraits> = self.store.clone();
-        let array = Array::open(storage, "/variant_allele")
-            .map_err(|e| savvy::Error::new(&format!("cannot open array variant_allele: {e}")))?;
-        let shape = array.shape();
-        let subset = ArraySubset::new_with_ranges(&shape.iter().map(|&d| 0..d).collect::<Vec<_>>());
-        let data: Vec<String> = array
-            .retrieve_array_subset::<Vec<String>>(&subset)
-            .map_err(|e| savvy::Error::new(&e.to_string()))?;
-
-        let dims: Vec<i32> = shape.iter().map(|&d| d as i32).collect();
-        let reordered = c_to_r_order(&data, &dims);
-        let mut out = OwnedStringSexp::new(reordered.len())?;
-        for (i, s) in reordered.iter().enumerate() {
-            out.set_elt(i, s)?;
-        }
-        out.set_dim(&dims)?;
-        Ok(out.into())
+        self.retrieve_array_by_name("variant_allele")
     }
 
     /// Genotype array (variants × samples × ploidy).
@@ -1296,13 +2184,17 @@ impl ZarrVcf {
                 "call_genotype must have dimensions variant x sample x ploidy",
             ));
         }
-        let nv = shape[0] as i32;
-        let ns = shape[1] as i32;
-        let ploidy = shape[2] as i32;
+        let nv = u64_dim_to_i32(shape[0], "variant")?;
+        let ns = u64_dim_to_i32(shape[1], "sample")?;
+        let ploidy = u64_dim_to_i32(shape[2], "ploidy")?;
 
         let var_idx = parse_indices(variants.unwrap_or(NullSexp.into()), nv)?;
         let sam_idx = parse_indices(samples.unwrap_or(NullSexp.into()), ns)?;
-        let dims = [var_idx.len() as i32, sam_idx.len() as i32, ploidy];
+        let dims = [
+            usize_len_to_i32(var_idx.len(), "selected variant")?,
+            usize_len_to_i32(sam_idx.len(), "selected sample")?,
+            ploidy,
+        ];
 
         let variant_runs = contiguous_index_runs(&var_idx, "variants")?;
         let sample_runs = contiguous_index_runs(&sam_idx, "samples")?;
@@ -1330,12 +2222,15 @@ impl ZarrVcf {
                 "call_genotype_phased must have dimensions variant x sample",
             ));
         }
-        let nv = shape[0] as i32;
-        let ns = shape[1] as i32;
+        let nv = u64_dim_to_i32(shape[0], "variant")?;
+        let ns = u64_dim_to_i32(shape[1], "sample")?;
 
         let var_idx = parse_indices(variants.unwrap_or(NullSexp.into()), nv)?;
         let sam_idx = parse_indices(samples.unwrap_or(NullSexp.into()), ns)?;
-        let dims = [var_idx.len() as i32, sam_idx.len() as i32];
+        let dims = [
+            usize_len_to_i32(var_idx.len(), "selected variant")?,
+            usize_len_to_i32(sam_idx.len(), "selected sample")?,
+        ];
 
         let variant_runs = contiguous_index_runs(&var_idx, "variants")?;
         let sample_runs = contiguous_index_runs(&sam_idx, "samples")?;
@@ -1404,13 +2299,13 @@ fn parse_indices(sexp: savvy::Sexp, max_val: i32) -> savvy::Result<Vec<usize>> {
                         "indices must be whole numbers; got {x}"
                     )));
                 }
-                let xi = x as i32;
-                if xi < 1 || xi > max_val {
+                if x < 1.0 || x > max_val as f64 {
                     return Err(savvy::Error::new(&format!(
                         "index {} out of range [1, {}]",
-                        xi, max_val
+                        x, max_val
                     )));
                 }
+                let xi = x as i32;
                 indices.push((xi - 1) as usize);
             }
             Ok(indices)
@@ -1611,11 +2506,64 @@ impl ZarrVcf {
         let dtype = array.data_type().to_string();
         let dtype = dtype.split(" / ").next().unwrap_or(&dtype).to_string();
 
-        let dims: Vec<i32> = shape.iter().map(|&d| d as i32).collect();
+        let dims: Vec<i32> = shape_to_i32_dims(&shape)?;
         let mut out = retrieve_typed(&array, &subset, &dtype, &dims)?;
         if dims.len() > 1 {
             out.set_dim(&dims)?;
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::c_to_r_order;
+
+    #[test]
+    fn c_to_r_order_roundtrip_1d_identity() {
+        let data = vec![10i32, 20, 30, 40];
+        let dims = vec![4];
+        let reordered = c_to_r_order(&data, &dims);
+        assert_eq!(reordered, vec![10, 20, 30, 40]);
+    }
+
+    #[test]
+    fn c_to_r_order_2x3_example() {
+        let data = vec![1, 2, 3, 4, 5, 6];
+        let dims = vec![2, 3];
+        let reordered = c_to_r_order(&data, &dims);
+        // Expected C->R mapping for dimensions (2,3):
+        // C-order index layout (0,1,2,3,4,5) maps to R positions [0,2,4,1,3,5].
+        assert_eq!(reordered, vec![1, 4, 2, 5, 3, 6]);
+    }
+
+    #[test]
+    fn c_to_r_order_3d_shape_is_permutation() {
+        let data: Vec<i32> = (1..=24).collect();
+        let dims = vec![2, 3, 4];
+        let first = c_to_r_order(&data, &dims);
+
+        let mut seen = vec![false; first.len()];
+        for &v in &first {
+            assert!((1..=24).contains(&v));
+            seen[(v - 1) as usize] = true;
+        }
+        assert!(seen.iter().all(|x| *x));
+        assert_eq!(first.len(), 24);
+    }
+
+    #[test]
+    fn c_to_r_order_4d_shape_is_permutation() {
+        let data: Vec<i32> = (1..=120).collect();
+        let dims = vec![2, 3, 4, 5];
+        let first = c_to_r_order(&data, &dims);
+
+        let mut seen = vec![false; first.len()];
+        for &v in &first {
+            assert!((1..=120).contains(&v));
+            seen[(v - 1) as usize] = true;
+        }
+        assert!(seen.iter().all(|x| *x));
+        assert_eq!(first.len(), 120);
     }
 }

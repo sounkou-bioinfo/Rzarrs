@@ -1,7 +1,21 @@
+SEXP savvy_rzarrs_int64_is_na__ffi(SEXP c_arg__x);
+SEXP savvy_rzarrs_int64_math__ffi(SEXP c_arg__x, SEXP c_arg__op);
+SEXP savvy_rzarrs_int64_op__ffi(SEXP c_arg__x, SEXP c_arg__y, SEXP c_arg__op);
+SEXP savvy_rzarrs_int64_summary__ffi(SEXP c_arg__x, SEXP c_arg__op, SEXP c_arg___na_rm);
+SEXP savvy_rzarrs_int64_to_double__ffi(SEXP c_arg__x);
+SEXP savvy_rzarrs_int64_values__ffi(SEXP c_arg__x);
+SEXP savvy_rzarrs_uint64_is_na__ffi(SEXP c_arg__x);
+SEXP savvy_rzarrs_uint64_math__ffi(SEXP c_arg__x, SEXP c_arg__op);
+SEXP savvy_rzarrs_uint64_op__ffi(SEXP c_arg__x, SEXP c_arg__y, SEXP c_arg__op);
+SEXP savvy_rzarrs_uint64_summary__ffi(SEXP c_arg__x, SEXP c_arg__op, SEXP c_arg___na_rm);
+SEXP savvy_rzarrs_uint64_to_double__ffi(SEXP c_arg__x);
+SEXP savvy_rzarrs_uint64_values__ffi(SEXP c_arg__x);
+
 // methods and associated functions for ZarrArray
 SEXP savvy_ZarrArray_chunk_shape__ffi(SEXP self__);
 SEXP savvy_ZarrArray_dimension_names__ffi(SEXP self__);
 SEXP savvy_ZarrArray_dtype__ffi(SEXP self__);
+SEXP savvy_ZarrArray_dtype_plan__ffi(SEXP self__);
 SEXP savvy_ZarrArray_metadata__ffi(SEXP self__);
 SEXP savvy_ZarrArray_metadata_json__ffi(SEXP self__);
 SEXP savvy_ZarrArray_ndim__ffi(SEXP self__);

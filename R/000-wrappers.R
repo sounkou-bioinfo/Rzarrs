@@ -38,6 +38,65 @@ NULL
 }
 
 
+`rzarrs_int64_is_na` <- function(`x`) {
+  .Call(savvy_rzarrs_int64_is_na__impl, `x`)
+}
+
+
+`rzarrs_int64_math` <- function(`x`, `op`) {
+  .Call(savvy_rzarrs_int64_math__impl, `x`, `op`)
+}
+
+
+`rzarrs_int64_op` <- function(`x`, `y`, `op`) {
+  .Call(savvy_rzarrs_int64_op__impl, `x`, `y`, `op`)
+}
+
+
+`rzarrs_int64_summary` <- function(`x`, `op`, `_na_rm`) {
+  .Call(savvy_rzarrs_int64_summary__impl, `x`, `op`, `_na_rm`)
+}
+
+
+`rzarrs_int64_to_double` <- function(`x`) {
+  .Call(savvy_rzarrs_int64_to_double__impl, `x`)
+}
+
+
+`rzarrs_int64_values` <- function(`x`) {
+  .Call(savvy_rzarrs_int64_values__impl, `x`)
+}
+
+
+`rzarrs_uint64_is_na` <- function(`x`) {
+  .Call(savvy_rzarrs_uint64_is_na__impl, `x`)
+}
+
+
+`rzarrs_uint64_math` <- function(`x`, `op`) {
+  .Call(savvy_rzarrs_uint64_math__impl, `x`, `op`)
+}
+
+
+`rzarrs_uint64_op` <- function(`x`, `y`, `op`) {
+  .Call(savvy_rzarrs_uint64_op__impl, `x`, `y`, `op`)
+}
+
+
+`rzarrs_uint64_summary` <- function(`x`, `op`, `_na_rm`) {
+  .Call(savvy_rzarrs_uint64_summary__impl, `x`, `op`, `_na_rm`)
+}
+
+
+`rzarrs_uint64_to_double` <- function(`x`) {
+  .Call(savvy_rzarrs_uint64_to_double__impl, `x`)
+}
+
+
+`rzarrs_uint64_values` <- function(`x`) {
+  .Call(savvy_rzarrs_uint64_values__impl, `x`)
+}
+
 ### wrapper functions for ZarrArray
 
 `ZarrArray_chunk_shape` <- function(self) {
@@ -55,6 +114,12 @@ NULL
 `ZarrArray_dtype` <- function(self) {
   function() {
     .Call(savvy_ZarrArray_dtype__impl, `self`)
+  }
+}
+
+`ZarrArray_dtype_plan` <- function(self) {
+  function() {
+    .Call(savvy_ZarrArray_dtype_plan__impl, `self`)
   }
 }
 
@@ -94,6 +159,7 @@ NULL
   e$`chunk_shape` <- `ZarrArray_chunk_shape`(ptr)
   e$`dimension_names` <- `ZarrArray_dimension_names`(ptr)
   e$`dtype` <- `ZarrArray_dtype`(ptr)
+  e$`dtype_plan` <- `ZarrArray_dtype_plan`(ptr)
   e$`metadata` <- `ZarrArray_metadata`(ptr)
   e$`metadata_json` <- `ZarrArray_metadata_json`(ptr)
   e$`ndim` <- `ZarrArray_ndim`(ptr)
@@ -379,7 +445,23 @@ class(`ZarrStore`) <- c("Rzarrs::ZarrStore__bundle", "savvy_Rzarrs__sealed")
 }
 
 
-#' A high-level reader for VCF Zarr stores (spec versions 0.1–0.4).
+#' High-level VCF Zarr reader
+#'
+#' `ZarrVcf$open(x)` opens a VCF Zarr store (spec versions 0.1–0.4) and
+#' returns an instance with methods to access variant, sample, and genotype data.
+#'
+#' @section Methods:
+#' \describe{
+#'   \item{`$open(x)`}{Open a VCF Zarr store from a path, URL, `ZarrStore`, or `ZarrObjectStore`.}
+#'   \item{`$version()`}{VCF Zarr spec version string.}
+#'   \item{`$n_variants()`, `$n_samples()`}{Number of variants and samples.}
+#'   \item{`$samples()`, `$contigs()`, `$filters()`}{Character vectors of sample IDs, contig names, filter IDs.}
+#'   \item{`$fields()`}{Available array names.}
+#'   \item{`$variant_position()`, `$variant_contig()`, `$variant_allele()`}{Per-variant data.}
+#'   \item{`$genotypes(variants, samples)`}{3-D array (variants × samples × ploidy) of integer genotypes.}
+#'   \item{`$call_genotype_phased(variants, samples)`}{Boolean phased matrix.}
+#'   \item{`$variant(name)`, `$call(name)`}{Generic accessor for `variant_<name>` / `call_<name>` arrays.}
+#' }
 #'
 #' @export
 `ZarrVcf` <- new.env(parent = emptyenv())

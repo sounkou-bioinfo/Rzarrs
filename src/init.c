@@ -39,6 +39,65 @@ SEXP handle_result(SEXP res_) {
     return (SEXP)res;
 }
 
+SEXP savvy_rzarrs_int64_is_na__impl(SEXP c_arg__x) {
+    SEXP res = savvy_rzarrs_int64_is_na__ffi(c_arg__x);
+    return handle_result(res);
+}
+
+SEXP savvy_rzarrs_int64_math__impl(SEXP c_arg__x, SEXP c_arg__op) {
+    SEXP res = savvy_rzarrs_int64_math__ffi(c_arg__x, c_arg__op);
+    return handle_result(res);
+}
+
+SEXP savvy_rzarrs_int64_op__impl(SEXP c_arg__x, SEXP c_arg__y, SEXP c_arg__op) {
+    SEXP res = savvy_rzarrs_int64_op__ffi(c_arg__x, c_arg__y, c_arg__op);
+    return handle_result(res);
+}
+
+SEXP savvy_rzarrs_int64_summary__impl(SEXP c_arg__x, SEXP c_arg__op, SEXP c_arg___na_rm) {
+    SEXP res = savvy_rzarrs_int64_summary__ffi(c_arg__x, c_arg__op, c_arg___na_rm);
+    return handle_result(res);
+}
+
+SEXP savvy_rzarrs_int64_to_double__impl(SEXP c_arg__x) {
+    SEXP res = savvy_rzarrs_int64_to_double__ffi(c_arg__x);
+    return handle_result(res);
+}
+
+SEXP savvy_rzarrs_int64_values__impl(SEXP c_arg__x) {
+    SEXP res = savvy_rzarrs_int64_values__ffi(c_arg__x);
+    return handle_result(res);
+}
+
+SEXP savvy_rzarrs_uint64_is_na__impl(SEXP c_arg__x) {
+    SEXP res = savvy_rzarrs_uint64_is_na__ffi(c_arg__x);
+    return handle_result(res);
+}
+
+SEXP savvy_rzarrs_uint64_math__impl(SEXP c_arg__x, SEXP c_arg__op) {
+    SEXP res = savvy_rzarrs_uint64_math__ffi(c_arg__x, c_arg__op);
+    return handle_result(res);
+}
+
+SEXP savvy_rzarrs_uint64_op__impl(SEXP c_arg__x, SEXP c_arg__y, SEXP c_arg__op) {
+    SEXP res = savvy_rzarrs_uint64_op__ffi(c_arg__x, c_arg__y, c_arg__op);
+    return handle_result(res);
+}
+
+SEXP savvy_rzarrs_uint64_summary__impl(SEXP c_arg__x, SEXP c_arg__op, SEXP c_arg___na_rm) {
+    SEXP res = savvy_rzarrs_uint64_summary__ffi(c_arg__x, c_arg__op, c_arg___na_rm);
+    return handle_result(res);
+}
+
+SEXP savvy_rzarrs_uint64_to_double__impl(SEXP c_arg__x) {
+    SEXP res = savvy_rzarrs_uint64_to_double__ffi(c_arg__x);
+    return handle_result(res);
+}
+
+SEXP savvy_rzarrs_uint64_values__impl(SEXP c_arg__x) {
+    SEXP res = savvy_rzarrs_uint64_values__ffi(c_arg__x);
+    return handle_result(res);
+}
 
 SEXP savvy_ZarrArray_chunk_shape__impl(SEXP self__) {
     SEXP res = savvy_ZarrArray_chunk_shape__ffi(self__);
@@ -52,6 +111,11 @@ SEXP savvy_ZarrArray_dimension_names__impl(SEXP self__) {
 
 SEXP savvy_ZarrArray_dtype__impl(SEXP self__) {
     SEXP res = savvy_ZarrArray_dtype__ffi(self__);
+    return handle_result(res);
+}
+
+SEXP savvy_ZarrArray_dtype_plan__impl(SEXP self__) {
+    SEXP res = savvy_ZarrArray_dtype_plan__ffi(self__);
     return handle_result(res);
 }
 
@@ -222,10 +286,22 @@ SEXP savvy_ZarrVcf_version__impl(SEXP self__) {
 
 
 static const R_CallMethodDef CallEntries[] = {
-
+    {"savvy_rzarrs_int64_is_na__impl", (DL_FUNC) &savvy_rzarrs_int64_is_na__impl, 1},
+    {"savvy_rzarrs_int64_math__impl", (DL_FUNC) &savvy_rzarrs_int64_math__impl, 2},
+    {"savvy_rzarrs_int64_op__impl", (DL_FUNC) &savvy_rzarrs_int64_op__impl, 3},
+    {"savvy_rzarrs_int64_summary__impl", (DL_FUNC) &savvy_rzarrs_int64_summary__impl, 3},
+    {"savvy_rzarrs_int64_to_double__impl", (DL_FUNC) &savvy_rzarrs_int64_to_double__impl, 1},
+    {"savvy_rzarrs_int64_values__impl", (DL_FUNC) &savvy_rzarrs_int64_values__impl, 1},
+    {"savvy_rzarrs_uint64_is_na__impl", (DL_FUNC) &savvy_rzarrs_uint64_is_na__impl, 1},
+    {"savvy_rzarrs_uint64_math__impl", (DL_FUNC) &savvy_rzarrs_uint64_math__impl, 2},
+    {"savvy_rzarrs_uint64_op__impl", (DL_FUNC) &savvy_rzarrs_uint64_op__impl, 3},
+    {"savvy_rzarrs_uint64_summary__impl", (DL_FUNC) &savvy_rzarrs_uint64_summary__impl, 3},
+    {"savvy_rzarrs_uint64_to_double__impl", (DL_FUNC) &savvy_rzarrs_uint64_to_double__impl, 1},
+    {"savvy_rzarrs_uint64_values__impl", (DL_FUNC) &savvy_rzarrs_uint64_values__impl, 1},
     {"savvy_ZarrArray_chunk_shape__impl", (DL_FUNC) &savvy_ZarrArray_chunk_shape__impl, 1},
     {"savvy_ZarrArray_dimension_names__impl", (DL_FUNC) &savvy_ZarrArray_dimension_names__impl, 1},
     {"savvy_ZarrArray_dtype__impl", (DL_FUNC) &savvy_ZarrArray_dtype__impl, 1},
+    {"savvy_ZarrArray_dtype_plan__impl", (DL_FUNC) &savvy_ZarrArray_dtype_plan__impl, 1},
     {"savvy_ZarrArray_metadata__impl", (DL_FUNC) &savvy_ZarrArray_metadata__impl, 1},
     {"savvy_ZarrArray_metadata_json__impl", (DL_FUNC) &savvy_ZarrArray_metadata_json__impl, 1},
     {"savvy_ZarrArray_ndim__impl", (DL_FUNC) &savvy_ZarrArray_ndim__impl, 1},

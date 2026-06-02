@@ -9,19 +9,22 @@
 #
 # Layout
 #   inst/testdata/int32.zarr/   4×6 int32,  chunks 2×3, values 1..24
+#   inst/testdata/uint8.zarr/   4×6 uint8,  chunks 2×3, values 1..24
 #   inst/testdata/float32.zarr/ 4×6 float32, chunks 2×3, values 1.0..24.0
+#   inst/testdata/complex64.zarr/ 4×6 complex64, chunks 2×3, values n-n*i
+#   inst/testdata/complex128.zarr/ 4×6 complex128, chunks 2×3, values n-n*i
 
-base <- file.path(dirname(dirname(sys.frame(1)$ofile)), "inst", "testdata")
-if (!nzchar(base) || grepl("^\\.", base)) {
-  # fallback when sourced interactively
-  base <- file.path("inst", "testdata")
-}
+cmd <- commandArgs(FALSE)
+file_arg <- sub("^--file=", "", grep("^--file=", cmd, value = TRUE)[1])
+root <- if (!is.na(file_arg)) dirname(dirname(normalizePath(file_arg))) else getwd()
+base <- file.path(root, "inst", "testdata")
 
 write_json_file <- function(path, txt) {
   writeLines(txt, path, useBytes = TRUE)
 }
 
 zarr3_array_meta <- function(shape, chunk_shape, dtype) {
+  fill_value <- if (dtype %in% c("complex64", "complex128")) "[0.0, 0.0]" else "0"
   sprintf(paste0(
     '{\n',
     '  "zarr_format": 3,\n',
@@ -30,11 +33,11 @@ zarr3_array_meta <- function(shape, chunk_shape, dtype) {
     '  "data_type": "%s",\n',
     '  "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [%s]}},\n',
     '  "chunk_key_encoding": {"name": "default", "configuration": {"separator": "/"}},\n',
-    '  "fill_value": 0,\n',
+    '  "fill_value": %s,\n',
     '  "codecs": [{"name": "bytes", "configuration": {"endian": "little"}}]\n',
     '}'
   ),
-  paste(shape, collapse = ", "), dtype, paste(chunk_shape, collapse = ", "))
+  paste(shape, collapse = ", "), dtype, paste(chunk_shape, collapse = ", "), fill_value)
 }
 
 # values for a chunk covering rows r0:(r0+nrows-1), cols c0:(c0+ncols-1)
@@ -59,10 +62,33 @@ write_i32 <- function(path, vals) {
   writeBin(as.integer(vals), con, size = 4L, endian = "little")
 }
 
+write_u8 <- function(path, vals) {
+  con <- file(path, "wb"); on.exit(close(con))
+  writeBin(as.raw(vals), con)
+}
+
 write_f32 <- function(path, vals) {
   con <- file(path, "wb"); on.exit(close(con))
   writeBin(as.double(vals), con, size = 4L, endian = "little")
 }
 
-make_fixture(file.path(base, "int32.zarr"),   "int32",   write_i32)
-make_fixture(file.path(base, "float32.zarr"), "float32", write_f32)
+write_complex_parts <- function(path, vals, size) {
+  z <- complex(real = vals, imaginary = -vals)
+  parts <- as.vector(rbind(Re(z), Im(z)))
+  con <- file(path, "wb"); on.exit(close(con))
+  writeBin(as.double(parts), con, size = size, endian = "little")
+}
+
+write_c64 <- function(path, vals) {
+  write_complex_parts(path, vals, 4L)
+}
+
+write_c128 <- function(path, vals) {
+  write_complex_parts(path, vals, 8L)
+}
+
+make_fixture(file.path(base, "int32.zarr"),      "int32",      write_i32)
+make_fixture(file.path(base, "uint8.zarr"),      "uint8",      write_u8)
+make_fixture(file.path(base, "float32.zarr"),    "float32",    write_f32)
+make_fixture(file.path(base, "complex64.zarr"),  "complex64",  write_c64)
+make_fixture(file.path(base, "complex128.zarr"), "complex128", write_c128)
