@@ -1905,6 +1905,7 @@ version = "0.1.0"
 dependencies = [
  "dashu-float",
  "dashu-int",
+ "half",
  "num-complex",
  "rc-zip",
  "savvy",

@@ -11,6 +11,7 @@ use savvy::{
 };
 
 use dashu_int::{IBig, UBig};
+use half::{bf16, f16};
 use num_complex::{Complex32, Complex64 as NumComplex64};
 
 use std::path::PathBuf;
@@ -1455,6 +1456,30 @@ fn retrieve_typed(
     let n: usize = subset.num_elements() as usize;
 
     match dtype {
+        "float16" | "f16" => {
+            let data: Vec<f16> = array
+                .retrieve_array_subset::<Vec<f16>>(subset)
+                .map_err(|e| savvy::Error::new(&e.to_string()))?;
+            let data = maybe_c_to_r_order(data, dims);
+            let mut out = OwnedRealSexp::new(n)?;
+            for (i, &v) in data.iter().enumerate() {
+                out[i] = f64::from(v);
+            }
+            Ok(out.into())
+        }
+
+        "bfloat16" | "bf16" | "b16" => {
+            let data: Vec<bf16> = array
+                .retrieve_array_subset::<Vec<bf16>>(subset)
+                .map_err(|e| savvy::Error::new(&e.to_string()))?;
+            let data = maybe_c_to_r_order(data, dims);
+            let mut out = OwnedRealSexp::new(n)?;
+            for (i, &v) in data.iter().enumerate() {
+                out[i] = f64::from(v);
+            }
+            Ok(out.into())
+        }
+
         "float32" => {
             let data: Vec<f32> = array
                 .retrieve_array_subset::<Vec<f32>>(subset)

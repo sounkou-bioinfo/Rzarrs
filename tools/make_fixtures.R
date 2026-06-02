@@ -10,6 +10,8 @@
 # Layout
 #   inst/testdata/int32.zarr/   4×6 int32,  chunks 2×3, values 1..24
 #   inst/testdata/uint8.zarr/   4×6 uint8,  chunks 2×3, values 1..24
+#   inst/testdata/float16.zarr/ 4×6 float16, chunks 2×3, values 1.0..24.0
+#   inst/testdata/bfloat16.zarr/ 4×6 bfloat16, chunks 2×3, values 1.0..24.0
 #   inst/testdata/float32.zarr/ 4×6 float32, chunks 2×3, values 1.0..24.0
 #   inst/testdata/complex64.zarr/ 4×6 complex64, chunks 2×3, values n-n*i
 #   inst/testdata/complex128.zarr/ 4×6 complex128, chunks 2×3, values n-n*i
@@ -67,6 +69,33 @@ write_u8 <- function(path, vals) {
   writeBin(as.raw(vals), con)
 }
 
+write_u16_le <- function(path, vals) {
+  con <- file(path, "wb"); on.exit(close(con))
+  writeBin(as.integer(vals), con, size = 2L, endian = "little")
+}
+
+float16_bits <- function(vals) {
+  bits <- integer(length(vals))
+  zero <- vals == 0
+  nonzero <- !zero
+  e <- floor(log2(abs(vals[nonzero])))
+  frac <- round((abs(vals[nonzero]) / 2^e - 1) * 1024)
+  bits[nonzero] <- (e + 15L) * 1024L + frac
+  bits[vals < 0] <- bits[vals < 0] + 32768L
+  bits
+}
+
+write_f16 <- function(path, vals) {
+  write_u16_le(path, float16_bits(vals))
+}
+
+write_bf16 <- function(path, vals) {
+  raw32 <- writeBin(as.double(vals), raw(), size = 4L, endian = "little")
+  bytes <- matrix(raw32, nrow = 4L)
+  con <- file(path, "wb"); on.exit(close(con))
+  writeBin(as.raw(as.vector(bytes[3:4, , drop = FALSE])), con)
+}
+
 write_f32 <- function(path, vals) {
   con <- file(path, "wb"); on.exit(close(con))
   writeBin(as.double(vals), con, size = 4L, endian = "little")
@@ -89,6 +118,8 @@ write_c128 <- function(path, vals) {
 
 make_fixture(file.path(base, "int32.zarr"),      "int32",      write_i32)
 make_fixture(file.path(base, "uint8.zarr"),      "uint8",      write_u8)
+make_fixture(file.path(base, "float16.zarr"),    "float16",    write_f16)
+make_fixture(file.path(base, "bfloat16.zarr"),   "bfloat16",   write_bf16)
 make_fixture(file.path(base, "float32.zarr"),    "float32",    write_f32)
 make_fixture(file.path(base, "complex64.zarr"),  "complex64",  write_c64)
 make_fixture(file.path(base, "complex128.zarr"), "complex128", write_c128)

@@ -31,33 +31,33 @@ objects:
 
 Zarr dtypes are mapped to R types automatically on read:
 
-| Zarr dtype                             | R type                          | Notes                                                                                                                                                                                                        |
-|----------------------------------------|---------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `float32` / `float64`                  | `double`                        | IEEE `NaN`/`Inf`/`-Inf` preserved                                                                                                                                                                            |
-| `int8` / `int16` / `int32`             | `integer`                       | `i32::MIN` → `NA_integer_`                                                                                                                                                                                   |
-| `int64`                                | `Rzarrs_int64`                  | lossless `format()`/`as.character()`; `as.double()` only when exactly representable; comparisons, checked `+`, `-`, `*`, `min()`, `max()`, `range()`, `sum()`, `prod()`, `abs()`, and `sign()` are supported |
-| `uint8` / `uint16`                     | `integer`                       | always fits                                                                                                                                                                                                  |
-| `uint32`                               | `double`                        | exact for all `uint32` values                                                                                                                                                                                |
-| `uint64`                               | `Rzarrs_uint64`                 | lossless `format()`/`as.character()`; `as.double()` only when exactly representable; comparisons, checked `+`, `-`, `*`, `min()`, `max()`, `range()`, `sum()`, `prod()`, `abs()`, and `sign()` are supported |
-| `bool`                                 | `logical`                       |                                                                                                                                                                                                              |
-| `string`, `utf8`, `vlen-utf8`          | `character`                     | variable-length UTF-8                                                                                                                                                                                        |
-| `numpy.datetime64`                     | `Rzarrs_int64`                  | exact int64 payload with R attributes `zarr_dtype`, `unit`, and `scale_factor`; `i64::MIN` is missing/NaT; scale explicitly before POSIXct coercion                                                          |
-| `numpy.timedelta64`                    | `Rzarrs_int64`                  | exact int64 payload with R attributes `zarr_dtype`, `unit`, and `scale_factor`; `i64::MIN` is missing/NaT; scale explicitly before seconds coercion                                                          |
-| `complex64` / `complex128`             | `complex`                       | R native complex vector; `complex64` components are promoted to double                                                                                                                                       |
-| `float16` / `float128` / plugin dtypes | not yet materialized by default |                                                                                                                                                                                                              |
+| Zarr dtype                                     | R type                          | Notes                                                                                                                                                                                                        |
+|------------------------------------------------|---------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `float16` / `bfloat16` / `float32` / `float64` | `double`                        | `float16`/`bfloat16`/`float32` are promoted exactly to R’s 64-bit double; IEEE `NaN`/`Inf`/`-Inf` preserved                                                                                                  |
+| `int8` / `int16` / `int32`                     | `integer`                       | `i32::MIN` → `NA_integer_`                                                                                                                                                                                   |
+| `int64`                                        | `Rzarrs_int64`                  | lossless `format()`/`as.character()`; `as.double()` only when exactly representable; comparisons, checked `+`, `-`, `*`, `min()`, `max()`, `range()`, `sum()`, `prod()`, `abs()`, and `sign()` are supported |
+| `uint8` / `uint16`                             | `integer`                       | always fits                                                                                                                                                                                                  |
+| `uint32`                                       | `double`                        | exact for all `uint32` values                                                                                                                                                                                |
+| `uint64`                                       | `Rzarrs_uint64`                 | lossless `format()`/`as.character()`; `as.double()` only when exactly representable; comparisons, checked `+`, `-`, `*`, `min()`, `max()`, `range()`, `sum()`, `prod()`, `abs()`, and `sign()` are supported |
+| `bool`                                         | `logical`                       |                                                                                                                                                                                                              |
+| `string`, `utf8`, `vlen-utf8`                  | `character`                     | variable-length UTF-8                                                                                                                                                                                        |
+| `numpy.datetime64`                             | `Rzarrs_int64`                  | exact int64 payload with R attributes `zarr_dtype`, `unit`, and `scale_factor`; `i64::MIN` is missing/NaT; scale explicitly before POSIXct coercion                                                          |
+| `numpy.timedelta64`                            | `Rzarrs_int64`                  | exact int64 payload with R attributes `zarr_dtype`, `unit`, and `scale_factor`; `i64::MIN` is missing/NaT; scale explicitly before seconds coercion                                                          |
+| `complex64` / `complex128`                     | `complex`                       | R native complex vector; `complex64` components are promoted to double                                                                                                                                       |
+| `float128` / plugin dtypes                     | not yet materialized by default |                                                                                                                                                                                                              |
 
 `Rzarrs_int64` and `Rzarrs_uint64` methods compute through Rust-side
 checked integer paths, not by converting to R `double`. Results stay
 fixed-width: overflow or operations that are not integer-preserving
 error instead of silently widening or losing precision.
 
-Unsupported extension/nested types (`float16`, `float128`, unknown time
-extensions, `optional[...]`, `list[...]`, `struct{...}`, etc.) are
-reported via an informative error with a planned materialization policy
-rather than silently cast. Temporal extension dtypes use exact
-`Rzarrs_int64` values with R attributes; future list/struct
-materialization should follow the Arrow/nanoarrow model: validity,
-offsets, and child arrays, not flattened ad hoc R lists.
+Unsupported extension/nested types (`float128`, unknown time extensions,
+`optional[...]`, `list[...]`, `struct{...}`, etc.) are reported via an
+informative error with a planned materialization policy rather than
+silently cast. Temporal extension dtypes use exact `Rzarrs_int64` values
+with R attributes; future list/struct materialization should follow the
+Arrow/nanoarrow model: validity, offsets, and child arrays, not
+flattened ad hoc R lists.
 
 Indices are **1-based and inclusive** on both ends — the same convention
 as all other R array operations.

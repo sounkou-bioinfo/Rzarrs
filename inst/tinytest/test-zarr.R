@@ -10,6 +10,8 @@ fixture <- function(name) {
 }
 
 int32_path   <- fixture("int32.zarr")
+float16_path <- fixture("float16.zarr")
+bfloat16_path <- fixture("bfloat16.zarr")
 float32_path <- fixture("float32.zarr")
 uint8_path <- fixture("uint8.zarr")
 complex64_path <- fixture("complex64.zarr")
@@ -76,6 +78,26 @@ expect_true(is.integer(u8data))
 expect_equal(dim(u8data), c(4L, 6L))
 expect_equal(u8data[1L, 1L], 1L)
 expect_equal(u8data[4L, 6L], 24L)
+
+# ---------------------------------------------------------------------------
+# low-precision float bundled fixtures — promoted exactly to R double
+# ---------------------------------------------------------------------------
+
+f16 <- ZarrArray$open(ZarrStore$open(float16_path), "/")
+expect_equal(f16$dtype(), "float16")
+f16data <- f16$retrieve(NULL, NULL)
+expect_true(is.double(f16data))
+expect_equal(dim(f16data), c(4L, 6L))
+expect_equal(f16data[1L, 1L], 1.0)
+expect_equal(f16data[4L, 6L], 24.0)
+
+bf16 <- ZarrArray$open(ZarrStore$open(bfloat16_path), "/")
+expect_equal(bf16$dtype(), "bfloat16")
+bf16data <- bf16$retrieve(NULL, NULL)
+expect_true(is.double(bf16data))
+expect_equal(dim(bf16data), c(4L, 6L))
+expect_equal(bf16data[1L, 1L], 1.0)
+expect_equal(bf16data[4L, 6L], 24.0)
 
 # ---------------------------------------------------------------------------
 # float32 bundled fixture
