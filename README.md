@@ -58,10 +58,13 @@ reported via an informative error with a planned materialization policy
 rather than silently cast. High-precision extension dtypes (`float128`,
 `decimal128`, `decimal256`) use a documented lossy-double policy for
 now; exact payload preservation requires a future extension-vector
-materializer. Temporal extension dtypes use exact `Rzarrs_int64` values
-with R attributes; future list/struct materialization should follow the
-Arrow/nanoarrow model: validity, offsets, and child arrays, not
-flattened ad hoc R lists.
+materializer. Note that actual reading of these high-precision extension
+dtypes still depends on a registered binary-layout data type
+materializer because they are extension dtypes, not core built-in
+`zarrs` element types. Temporal extension dtypes use exact
+`Rzarrs_int64` values with R attributes; future list/struct
+materialization should follow the Arrow/nanoarrow model: validity,
+offsets, and child arrays, not flattened ad hoc R lists.
 
 Indices are **1-based and inclusive** on both ends — the same convention
 as all other R array operations.

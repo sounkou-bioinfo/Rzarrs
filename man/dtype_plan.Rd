@@ -15,3 +15,9 @@ A named list describing the planned R materialization.
 \description{
 Plan R materialization for a Zarr dtype.
 }
+\details{
+High-precision extension dtypes such as \code{float128}, \code{decimal128}, and
+\code{decimal256} are planned as lossy R \code{double} values. Actual reading still
+depends on a registered binary-layout data type materializer because these are
+extension dtypes, not core built-in zarrs element types.
+}

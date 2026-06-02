@@ -15,6 +15,11 @@ codec_capabilities <- function(x = NULL) {
 
 #' Plan R materialization for a Zarr dtype
 #'
+#' High-precision extension dtypes such as `float128`, `decimal128`, and
+#' `decimal256` are planned as lossy R `double` values. Actual reading still
+#' depends on a registered binary-layout data type materializer because these are
+#' extension dtypes, not core built-in zarrs element types.
+#'
 #' @param dtype Character scalar dtype name.
 #' @return A named list describing the planned R materialization.
 #' @export
