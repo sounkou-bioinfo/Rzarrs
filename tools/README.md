@@ -14,6 +14,8 @@ Creates:
 - `inst/testdata/uint8.zarr` — 4 x 6 `uint8`, chunks 2 x 3, values 1..24; Rzarrs reads this as R `integer`, not `raw`
 - `inst/testdata/float16.zarr` — 4 x 6 `float16`, chunks 2 x 3, values 1..24; Rzarrs promotes this exactly to R `double`
 - `inst/testdata/bfloat16.zarr` — 4 x 6 `bfloat16`, chunks 2 x 3, values 1..24; Rzarrs promotes this exactly to R `double`
+- `inst/testdata/float16_special.zarr` — 1-D `float16` values `0`, `NaN`, `Inf`, `-Inf`
+- `inst/testdata/bfloat16_special.zarr` — 1-D `bfloat16` values `0`, `NaN`, `Inf`, `-Inf`
 - `inst/testdata/float32.zarr` — 4 x 6 `float32`, chunks 2 x 3, values 1..24
 - `inst/testdata/complex64.zarr` — 4 x 6 `complex64`, chunks 2 x 3, values `n - n*i`
 - `inst/testdata/complex128.zarr` — 4 x 6 `complex128`, chunks 2 x 3, values `n - n*i`

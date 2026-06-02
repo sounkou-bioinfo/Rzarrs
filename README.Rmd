@@ -39,7 +39,7 @@ Zarr dtypes are mapped to R types automatically on read:
 
 | Zarr dtype | R type | Notes |
 |---|---|---|
-| `float16` / `bfloat16` / `float32` / `float64` | `double` | `float16`/`bfloat16`/`float32` are promoted exactly to R's 64-bit double; IEEE `NaN`/`Inf`/`-Inf` preserved |
+| `float16` / `bfloat16` / `float32` / `float64` | `double` | `float16`/`bfloat16`/`float32` are promoted exactly to R's 64-bit double; `NaN`/`Inf`/`-Inf` values are preserved as R doubles, but NaN payload bits are not a user-facing contract |
 | `int8` / `int16` / `int32` | `integer` | `i32::MIN` → `NA_integer_` |
 | `int64` | `Rzarrs_int64` | lossless `format()`/`as.character()`; `as.double()` only when exactly representable; comparisons, checked `+`, `-`, `*`, `min()`, `max()`, `range()`, `sum()`, `prod()`, `abs()`, and `sign()` are supported |
 | `uint8` / `uint16` | `integer` | always fits |

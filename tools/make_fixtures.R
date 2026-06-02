@@ -59,6 +59,13 @@ make_fixture <- function(dir, dtype, write_chunk) {
   message("Written: ", dir)
 }
 
+make_1d_fixture <- function(dir, dtype, write_chunk, vals) {
+  dir.create(file.path(dir, "c"), recursive = TRUE, showWarnings = FALSE)
+  write_json_file(file.path(dir, "zarr.json"), zarr3_array_meta(length(vals), length(vals), dtype))
+  write_chunk(file.path(dir, "c/0"), vals)
+  message("Written: ", dir)
+}
+
 write_i32 <- function(path, vals) {
   con <- file(path, "wb"); on.exit(close(con))
   writeBin(as.integer(vals), con, size = 4L, endian = "little")
@@ -96,6 +103,14 @@ write_bf16 <- function(path, vals) {
   writeBin(as.raw(as.vector(bytes[3:4, , drop = FALSE])), con)
 }
 
+write_f16_bits <- function(path, bits) {
+  write_u16_le(path, bits)
+}
+
+write_bf16_bits <- function(path, bits) {
+  write_u16_le(path, bits)
+}
+
 write_f32 <- function(path, vals) {
   con <- file(path, "wb"); on.exit(close(con))
   writeBin(as.double(vals), con, size = 4L, endian = "little")
@@ -120,6 +135,8 @@ make_fixture(file.path(base, "int32.zarr"),      "int32",      write_i32)
 make_fixture(file.path(base, "uint8.zarr"),      "uint8",      write_u8)
 make_fixture(file.path(base, "float16.zarr"),    "float16",    write_f16)
 make_fixture(file.path(base, "bfloat16.zarr"),   "bfloat16",   write_bf16)
+make_1d_fixture(file.path(base, "float16_special.zarr"), "float16", write_f16_bits, c(0x0000, 0x7e00, 0x7c00, 0xfc00))
+make_1d_fixture(file.path(base, "bfloat16_special.zarr"), "bfloat16", write_bf16_bits, c(0x0000, 0x7fc0, 0x7f80, 0xff80))
 make_fixture(file.path(base, "float32.zarr"),    "float32",    write_f32)
 make_fixture(file.path(base, "complex64.zarr"),  "complex64",  write_c64)
 make_fixture(file.path(base, "complex128.zarr"), "complex128", write_c128)

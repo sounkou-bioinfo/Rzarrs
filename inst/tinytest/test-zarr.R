@@ -12,6 +12,8 @@ fixture <- function(name) {
 int32_path   <- fixture("int32.zarr")
 float16_path <- fixture("float16.zarr")
 bfloat16_path <- fixture("bfloat16.zarr")
+float16_special_path <- fixture("float16_special.zarr")
+bfloat16_special_path <- fixture("bfloat16_special.zarr")
 float32_path <- fixture("float32.zarr")
 uint8_path <- fixture("uint8.zarr")
 complex64_path <- fixture("complex64.zarr")
@@ -98,6 +100,18 @@ expect_true(is.double(bf16data))
 expect_equal(dim(bf16data), c(4L, 6L))
 expect_equal(bf16data[1L, 1L], 1.0)
 expect_equal(bf16data[4L, 6L], 24.0)
+
+f16_special <- ZarrArray$open(ZarrStore$open(float16_special_path), "/")$retrieve(NULL, NULL)
+expect_equal(f16_special[1L], 0.0)
+expect_true(is.nan(f16_special[2L]))
+expect_true(is.infinite(f16_special[3L]) && f16_special[3L] > 0)
+expect_true(is.infinite(f16_special[4L]) && f16_special[4L] < 0)
+
+bf16_special <- ZarrArray$open(ZarrStore$open(bfloat16_special_path), "/")$retrieve(NULL, NULL)
+expect_equal(bf16_special[1L], 0.0)
+expect_true(is.nan(bf16_special[2L]))
+expect_true(is.infinite(bf16_special[3L]) && bf16_special[3L] > 0)
+expect_true(is.infinite(bf16_special[4L]) && bf16_special[4L] < 0)
 
 # ---------------------------------------------------------------------------
 # float32 bundled fixture
