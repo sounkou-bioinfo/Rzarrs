@@ -53,11 +53,7 @@ expect_true("bytes" %in% arr_codec_caps$codec)
 expect_true(arr_codec_caps$supported[arr_codec_caps$codec == "bytes"])
 all_codec_caps <- codec_capabilities()
 expect_true("blosc" %in% all_codec_caps$codec)
-if (.Platform$OS.type == "windows") {
-  expect_false(all_codec_caps$supported[all_codec_caps$codec == "blosc"])
-} else {
-  expect_true(all_codec_caps$supported[all_codec_caps$codec == "blosc"])
-}
+expect_true(all_codec_caps$supported[all_codec_caps$codec == "blosc"])
 expect_equal(dtype_plan("float128")$r_type, "Real")
 expect_equal(dtype_plan("float128")$precision, "PromotedLossy")
 expect_false(dtype_plan("float128")$lossless)

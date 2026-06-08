@@ -90,12 +90,10 @@ install time.
 Default Rust features are `aws`, `fs`, and `zip`: HTTP/HTTPS, local
 `file://` stores via `ZarrObjectStore`, S3, and local `.zarr.zip`
 archives work out of the box. Common Zarr V3 codecs, including `bytes`,
-`gzip`, `zstd`, `crc32c`, `sharding_indexed`, and `transpose`, are
-compiled in. `blosc` is enabled by default on non-Windows builds and
-disabled by default on Windows because the vendored C-Blosc pthread
-shims conflict with Rtools’ winpthread at DLL link time; use
-`codec_capabilities()` or `arr$codec_capabilities()` to inspect support.
-Source installs can enable more providers with configure arguments:
+`gzip`, `zstd`, `crc32c`, `sharding_indexed`, `transpose`, and `blosc`,
+are compiled in; use `codec_capabilities()` or
+`arr$codec_capabilities()` to inspect support. Source installs can
+enable more providers with configure arguments:
 
 ``` r
 # Enable GCS in addition to defaults
