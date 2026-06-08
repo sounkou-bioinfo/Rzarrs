@@ -45,3 +45,14 @@ Rscript tools/check_rarr_interop.R
 ```
 
 This compares selected package fixtures as read by Rzarrs and Rarr. The core fixture scripts above remain base-R so package tests do not depend on Rarr being present.
+
+## Rust vendoring
+
+The source package installs offline from `src/rust/vendor.tar.xz`. Regenerate it from `src/rust/Cargo.lock` with:
+
+```sh
+make vendor-rust
+# or: tools/vendor_rust_deps.sh
+```
+
+The vendoring script runs `cargo vendor`, applies all patches in `tools/vendor-patches/`, updates the affected vendored Cargo checksum files, and writes a normalized `src/rust/vendor.tar.xz`. Use `tools/vendor_rust_deps.sh --keep-vendor` when you want to inspect the patched `src/rust/vendor/` tree locally.

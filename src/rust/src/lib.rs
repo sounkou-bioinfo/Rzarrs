@@ -1883,6 +1883,8 @@ fn json_to_sexp(v: &serde_json::Value) -> savvy::Result<savvy::Sexp> {
 ///
 /// `ZarrVcf$open(x)` opens a VCF Zarr store (spec versions 0.1–0.4) and
 /// returns an instance with methods to access variant, sample, and genotype data.
+/// Genotypes use the VCF Zarr integer encoding: allele indexes are 0-based,
+/// `-1` is a missing allele (`.` in VCF), and `-2` is the array fill sentinel.
 ///
 /// @section Methods:
 /// \describe{
@@ -1892,7 +1894,7 @@ fn json_to_sexp(v: &serde_json::Value) -> savvy::Result<savvy::Sexp> {
 ///   \item{`$samples()`, `$contigs()`, `$filters()`}{Character vectors of sample IDs, contig names, filter IDs.}
 ///   \item{`$fields()`}{Available array names.}
 ///   \item{`$variant_position()`, `$variant_contig()`, `$variant_allele()`}{Per-variant data.}
-///   \item{`$genotypes(variants, samples)`}{3-D array (variants × samples × ploidy) of integer genotypes.}
+///   \item{`$genotypes(variants, samples)`}{3-D array (variants × samples × ploidy) of integer genotypes using VCF Zarr `-1`/`-2` sentinel values.}
 ///   \item{`$call_genotype_phased(variants, samples)`}{Boolean phased matrix.}
 ///   \item{`$variant(name)`, `$call(name)`}{Generic accessor for `variant_<name>` / `call_<name>` arrays.}
 /// }

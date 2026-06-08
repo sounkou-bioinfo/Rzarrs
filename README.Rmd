@@ -215,7 +215,9 @@ grp$children(FALSE)
 
 `ZarrVcf` reads VCF data stored in the
 [VCF Zarr spec](https://github.com/sgkit-dev/vcf-zarr-spec) (v0.1–v0.4).
-It accepts a local path, a URL, or an existing store handle.
+It accepts a local path, a URL, or an existing store handle. Genotypes are
+returned using the VCF Zarr integer encoding: allele indexes are 0-based,
+`-1` means a missing allele (`.` in VCF), and `-2` is the array fill sentinel.
 
 ```{r vcf}
 vcf_path <- system.file("testdata", "vcf_zarr", "v0.4", package = "Rzarrs")

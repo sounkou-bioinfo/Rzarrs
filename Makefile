@@ -50,4 +50,7 @@ rdm: install
 site:
 	R -e "pkgdown::build_site()"
 
-.PHONY: all rd build check install_deps install install2 install3 clean dev-install test1 test2 test0 test rdm site
+vendor-rust:
+	tools/vendor_rust_deps.sh
+
+.PHONY: all rd build check install_deps install install2 install3 clean dev-install test1 test2 test0 test rdm site vendor-rust

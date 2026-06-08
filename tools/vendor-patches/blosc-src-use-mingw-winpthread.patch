@@ -1,0 +1,17 @@
+--- a/vendor/blosc-src/c-blosc/blosc/blosc.c
++++ b/vendor/blosc-src/c-blosc/blosc/blosc.c
+@@ -56,8 +56,12 @@
+   #include <inttypes.h>
+ #endif  /* _WIN32 */
+ 
+-/* Include the win32/pthread.h library for all the Windows builds. See #224. */
+-#if defined(_WIN32)
++/* Include the win32/pthread.h library for Windows builds without pthreads.
++ * MinGW/Rtools provides winpthread; using C-Blosc's internal shim there defines
++ * pthread_* symbols inside blosc.o and conflicts with libwinpthread when the R
++ * package DLL is linked.
++ */
++#if defined(_WIN32) && !defined(__MINGW32__)
+   #include "win32/pthread.h"
+   #include "win32/pthread.c"
+ #else
