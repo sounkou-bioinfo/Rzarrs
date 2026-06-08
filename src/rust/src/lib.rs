@@ -135,13 +135,90 @@ impl ZarrStore {
 /// @export
 #[savvy]
 pub struct ZarrObjectStore {
-    storage: Arc<
+    storage: Arc<dyn ReadListStorage>,
+    url: String,
+}
+
+fn parse_object_store_url(
+    url: &str,
+) -> Result<(Box<dyn object_store::ObjectStore>, object_store::path::Path), savvy::Error> {
+    let parsed = url::Url::parse(url)
+        .map_err(|e| savvy::Error::new(&format!("invalid URL '{url}': {e}")))?;
+    object_store::parse_url_opts(&parsed, std::env::vars())
+        .map_err(|e| savvy::Error::new(&format!("cannot open object store: {e}")))
+}
+
+fn prefix_object_store(
+    store: Box<dyn object_store::ObjectStore>,
+    path: object_store::path::Path,
+) -> Box<dyn object_store::ObjectStore> {
+    if path == object_store::path::Path::default() {
+        store
+    } else {
+        Box::new(object_store::prefix::PrefixStore::new(store, path))
+    }
+}
+
+fn sync_object_store(
+    store: Box<dyn object_store::ObjectStore>,
+) -> savvy::Result<
+    Arc<
         AsyncToSyncStorageAdapter<
             AsyncObjectStore<Box<dyn object_store::ObjectStore>>,
             TokioBlockOn,
         >,
     >,
-    url: String,
+> {
+    let runtime = make_tokio_runtime()?;
+    let async_store = Arc::new(AsyncObjectStore::new(store));
+    Ok(Arc::new(AsyncToSyncStorageAdapter::new(
+        async_store,
+        TokioBlockOn(runtime),
+    )))
+}
+
+fn open_object_store_url(url: &str) -> savvy::Result<Arc<dyn ReadListStorage>> {
+    let (store, path) = parse_object_store_url(url)?;
+    if path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+    {
+        return open_object_store_zip_url(store, path, url);
+    }
+
+    let store = prefix_object_store(store, path);
+    let sync_store = sync_object_store(store)?;
+    Ok(sync_store)
+}
+
+#[cfg(feature = "zip")]
+fn open_object_store_zip_url(
+    store: Box<dyn object_store::ObjectStore>,
+    path: object_store::path::Path,
+    url: &str,
+) -> savvy::Result<Arc<dyn ReadListStorage>> {
+    let zip_name = path
+        .filename()
+        .ok_or_else(|| savvy::Error::new(&format!("URL does not name a zip object: {url}")))?;
+    let zip_parent = path.parent().unwrap_or_default();
+    let store = prefix_object_store(store, zip_parent);
+    let sync_store = sync_object_store(store)?;
+    let storage_key = zarrs::storage::StoreKey::try_from(zip_name)
+        .map_err(|e| savvy::Error::new(&format!("invalid zip object key '{zip_name}': {e}")))?;
+    let zip_store = zarrs_zip::ZipStorageAdapter::new(sync_store, storage_key)
+        .map_err(|e| savvy::Error::new(&format!("cannot open zip object '{url}': {e}")))?;
+    Ok(Arc::new(zip_store))
+}
+
+#[cfg(not(feature = "zip"))]
+fn open_object_store_zip_url(
+    _store: Box<dyn object_store::ObjectStore>,
+    _path: object_store::path::Path,
+    _url: &str,
+) -> savvy::Result<Arc<dyn ReadListStorage>> {
+    Err(savvy::Error::new(
+        "remote .zarr.zip support is disabled; reinstall with Rust feature 'zip'",
+    ))
 }
 
 /// @export
@@ -150,8 +227,9 @@ impl ZarrObjectStore {
     /// Open an object-store Zarr backend from a URL.
     ///
     /// Supported URL schemes: `s3://`, `gs://`, `az://`, `https://`,
-    /// `file:///`. Credentials are read from the process environment
-    /// automatically — set the standard provider env vars
+    /// `file:///`. URLs ending in `.zarr.zip` or `.zip` are opened as zip
+    /// objects when the `zip` Rust feature is enabled. Credentials are read
+    /// from the process environment automatically — set the standard provider env vars
     /// (`AWS_ACCESS_KEY_ID` / `GOOGLE_APPLICATION_CREDENTIALS` /
     /// `AZURE_STORAGE_ACCOUNT` etc.) before calling this function.
     ///
@@ -159,28 +237,9 @@ impl ZarrObjectStore {
     /// @returns A `ZarrObjectStore` object.
     /// @export
     fn open(url: &str) -> savvy::Result<Self> {
-        let parsed = url::Url::parse(url)
-            .map_err(|e| savvy::Error::new(&format!("invalid URL '{url}': {e}")))?;
-        // Pass all process env vars — object_store builders pick up whichever
-        // ones are relevant for the selected backend (AWS_*, GOOGLE_*, AZURE_*…).
-        let (store, path) = object_store::parse_url_opts(&parsed, std::env::vars())
-            .map_err(|e| savvy::Error::new(&format!("cannot open object store: {e}")))?;
-        // Wrap with a prefix so array paths are resolved relative to the URL's
-        // path component rather than the storage root.
-        let store: Box<dyn object_store::ObjectStore> =
-            if path == object_store::path::Path::default() {
-                store
-            } else {
-                Box::new(object_store::prefix::PrefixStore::new(store, path))
-            };
-        let runtime = make_tokio_runtime()?;
-        let async_store = Arc::new(AsyncObjectStore::new(store));
-        let sync_store = Arc::new(AsyncToSyncStorageAdapter::new(
-            async_store,
-            TokioBlockOn(runtime),
-        ));
+        let storage = open_object_store_url(url)?;
         Ok(Self {
-            storage: sync_store,
+            storage,
             url: url.to_string(),
         })
     }
@@ -312,23 +371,6 @@ pub struct ZarrArray {
     inner: Array<dyn ReadableStorageTraits>,
 }
 
-// Internal helper — open an array from an AsyncToSync-wrapped store.
-fn open_via_adapter<S, B>(
-    storage: Arc<AsyncToSyncStorageAdapter<S, B>>,
-    path: &str,
-) -> savvy::Result<ZarrArray>
-where
-    S: zarrs::storage::AsyncReadableStorageTraits
-        + zarrs::storage::AsyncListableStorageTraits
-        + 'static,
-    B: AsyncToSyncBlockOn + 'static,
-{
-    let storage: Arc<dyn ReadableStorageTraits> = storage;
-    let array = Array::open(storage, path)
-        .map_err(|e| savvy::Error::new(&format!("cannot open array '{path}': {e}")))?;
-    Ok(ZarrArray { inner: array })
-}
-
 /// @export
 #[savvy]
 impl ZarrArray {
@@ -352,7 +394,10 @@ impl ZarrArray {
     /// @returns A `ZarrArray` object.
     /// @export
     fn open_object_store(store: &ZarrObjectStore, path: &str) -> savvy::Result<Self> {
-        open_via_adapter(store.storage.clone(), path)
+        let storage: Arc<dyn ReadableStorageTraits> = store.storage.clone();
+        let array = Array::open(storage, path)
+            .map_err(|e| savvy::Error::new(&format!("cannot open array '{path}': {e}")))?;
+        Ok(Self { inner: array })
     }
 
     /// Number of dimensions.
@@ -1912,6 +1957,18 @@ pub struct ZarrVcf {
     filters: Vec<String>,
 }
 
+const VCF_KNOWN_ARRAYS: &[&str] = &[
+    "variant_contig",
+    "variant_position",
+    "variant_allele",
+    "call_genotype",
+    "call_genotype_phased",
+    "sample_id",
+    "contig_id",
+    "filter_id",
+    "filter_description",
+];
+
 fn looks_like_url(path: &str) -> bool {
     path.starts_with("http://")
         || path.starts_with("https://")
@@ -1936,15 +1993,26 @@ fn init_vcf_from_store(store: Arc<dyn ReadListStorage>) -> savvy::Result<ZarrVcf
         .unwrap_or("0.1")
         .to_string();
 
-    let children = group
-        .children(false)
-        .map_err(|e| savvy::Error::new(&format!("cannot list children: {e}")))?;
-
-    let array_names: Vec<String> = children
-        .iter()
-        .filter(|n| matches!(n.metadata(), NodeMetadata::Array(_)))
-        .map(|n| path_to_name(n.path().as_str()).to_string())
-        .collect();
+    let mut array_names: Vec<String> = match group.children(false) {
+        Ok(children) => children
+            .iter()
+            .filter(|n| matches!(n.metadata(), NodeMetadata::Array(_)))
+            .map(|n| path_to_name(n.path().as_str()).to_string())
+            .collect(),
+        // Some backends (notably plain HTTP without directory listing) can read
+        // known Zarr keys but cannot list group children.  VCF Zarr has a small
+        // standard field set, so probe those arrays and keep the reader usable
+        // on any readable storage backend.
+        Err(_) => Vec::new(),
+    };
+    let readable_storage: Arc<dyn ReadableStorageTraits> = store.clone();
+    for name in VCF_KNOWN_ARRAYS {
+        if !array_names.iter().any(|field| field == name)
+            && Array::open(readable_storage.clone(), format!("/{name}").as_str()).is_ok()
+        {
+            array_names.push((*name).to_string());
+        }
+    }
 
     // n_variants from variant_position array shape
     let n_variants = if array_names.contains(&"variant_position".to_string()) {
@@ -2145,9 +2213,10 @@ fn open_local_zip_store(_path: &str) -> savvy::Result<Arc<dyn ReadListStorage>> 
 impl ZarrVcf {
     /// Open a VCF Zarr store from a local path or URL.
     ///
-    /// Automatically detects `.zip` files and reads them via the
-    /// `zarrs_zip` adapter directly, and URL schemes (`http://`, `s3://`,
-    /// `gs://`, `az://`, `file://`).
+    /// Automatically detects local `.zip` files and `.zip` URL objects and reads
+    /// them via the `zarrs_zip` adapter directly. URL schemes (`http://`,
+    /// `s3://`, `gs://`, `az://`, `file://`) are supported by the object-store
+    /// backend.
     ///
     /// @param path Path to a `.zarr` directory, a `.zip` file, or a URL.
     /// @returns A `ZarrVcf` object.
@@ -2175,28 +2244,14 @@ impl ZarrVcf {
     /// Open a VCF Zarr store from an object-store URL (S3, GCS, Azure, HTTP/HTTPS).
     ///
     /// Credentials are discovered from the process environment variables automatically.
+    /// `.zarr.zip` / `.zip` URLs are opened as zip objects when the `zip` Rust
+    /// feature is enabled.
     ///
     /// @param url Store URL, e.g. `"s3://my-bucket/path/to/store.zarr"`.
     /// @returns A `ZarrVcf` object.
     /// @export
     fn open_object_store(url: &str) -> savvy::Result<Self> {
-        let parsed = url::Url::parse(url)
-            .map_err(|e| savvy::Error::new(&format!("invalid URL '{url}': {e}")))?;
-        let (store, path) = object_store::parse_url_opts(&parsed, std::env::vars())
-            .map_err(|e| savvy::Error::new(&format!("cannot open object store: {e}")))?;
-        let store: Box<dyn object_store::ObjectStore> =
-            if path == object_store::path::Path::default() {
-                store
-            } else {
-                Box::new(object_store::prefix::PrefixStore::new(store, path))
-            };
-        let runtime = make_tokio_runtime()?;
-        let async_store = Arc::new(AsyncObjectStore::new(store));
-        let sync_store: Arc<dyn ReadListStorage> = Arc::new(AsyncToSyncStorageAdapter::new(
-            async_store,
-            TokioBlockOn(runtime),
-        ));
-        init_vcf_from_store(sync_store)
+        init_vcf_from_store(open_object_store_url(url)?)
     }
 
     /// Open a VCF Zarr store from a `ZarrStore` (local filesystem).

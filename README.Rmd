@@ -20,8 +20,8 @@ knitr::opts_chunk$set(
 
 R bindings to the [`zarrs`](https://github.com/zarrs/zarrs) Rust library for
 reading Zarr V3 (and compatible Zarr V2) stores. The current package is
-reader-first: local filesystems, HTTP/HTTPS, S3, and local `.zarr.zip` VCF
-archives are supported by default. GCS and Azure Blob can be enabled when
+reader-first: local filesystems, HTTP/HTTPS, S3, and local or object-store
+`.zarr.zip` VCF archives are supported by default. GCS and Azure Blob can be enabled when
 installing from source.
 
 ## Overview
@@ -78,7 +78,7 @@ install.packages(
 A Rust toolchain (cargo + rustc >= 1.82) and GNU Make are required at install time.
 
 Default Rust features are `aws`, `fs`, and `zip`: HTTP/HTTPS, local `file://`
-stores via `ZarrObjectStore`, S3, and local `.zarr.zip` archives work out of
+stores via `ZarrObjectStore`, S3, and local or object-store `.zarr.zip` archives work out of
 the box. Common Zarr V3 codecs, including `bytes`, `gzip`, `zstd`, `crc32c`,
 `sharding_indexed`, `transpose`, and `blosc`, are compiled in; use
 `codec_capabilities()` or `arr$codec_capabilities()` to inspect support. Source
@@ -238,8 +238,10 @@ zv$call_genotype_phased()
 ### VCF Zarr ZIP archives
 
 VCF Zarr data are often distributed as `.zarr.zip` archives for transfer and
-small examples. `ZarrVcf$open()` accepts a local `.zarr.zip` path when the Rust
-`zip` feature is enabled; `zip` is part of the default feature set.
+small examples. `ZarrVcf$open()` accepts local `.zarr.zip` paths and object-store
+zip URLs such as `s3://bucket/path/cohort.zarr.zip` or
+`https://example.org/cohort.zarr.zip` when the Rust `zip` feature is enabled;
+`zip` is part of the default feature set.
 
 ```{r vcf-zip}
 zip_path <- system.file("testdata", "vcf_zarr", "v0.4.zarr.zip", package = "Rzarrs")

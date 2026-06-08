@@ -11,6 +11,8 @@ updated as support, tests, or explicit non-support decisions land.
   HTTPS, S3; GCS/Azure when enabled at source-install time).
 - Open local `.zarr.zip` / `.zip` archives through `ZarrStore$open()` for generic
   `ZarrArray` and `ZarrGroup` use.
+- Open object-store `.zarr.zip` / `.zip` URLs through `ZarrObjectStore$open()`
+  and `ZarrVcf$open()` (for example S3 or HTTP zip objects).
 - Inspect array shape, ndim, dtype, dtype plan, chunk shape, dimension names, and
   metadata JSON/list.
 - Inspect group attributes and children when the store supports listing.
@@ -147,7 +149,8 @@ Basic support exists, but fixture coverage should be expanded for:
 
 Need more tests for:
 
-- HTTP stores without list support;
+- broader tests for HTTP stores without list support (VCF Zarr probes standard
+  arrays when listing is unavailable);
 - object stores with prefixes;
 - URL path normalization;
 - stores where direct array open works but group listing does not;

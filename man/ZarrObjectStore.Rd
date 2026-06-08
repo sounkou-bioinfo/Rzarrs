@@ -6,6 +6,8 @@
   \href{https://crates.io/crates/object_store}{object_store} crate:
   \code{s3://}, \code{gs://}, \code{az://}, \code{https://}, or
   \code{file:///}.
+  URLs ending in ile{.zarr.zip} or ile{.zip} are opened as zip objects
+  when the Rust ile{zip} feature is enabled.
 
   Credentials are read automatically from the standard environment
   variables for each provider (the same ones used by the AWS CLI,
@@ -19,7 +21,8 @@
 
       \describe{
         \item{\code{url}}{Character scalar.  Store URL,
-          e.g. \code{"s3://my-bucket/path/to/store.zarr"} or
+          e.g. \code{"s3://my-bucket/path/to/store.zarr"},
+          \code{"s3://my-bucket/path/to/store.zarr.zip"}, or
           \code{"https://example.com/store.zarr"}.}
       }
       Returns a \code{ZarrObjectStore} object.

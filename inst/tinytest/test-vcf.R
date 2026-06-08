@@ -135,6 +135,15 @@ expect_true(is.logical(phz))
 # No temp dir leakage
 expect_false(any(grepl("rzarrs_", list.dirs(tempdir(), recursive = FALSE))))
 
+zip_abs <- normalizePath(zip_path, winslash = "/", mustWork = TRUE)
+zip_url <- paste0("file://", if (.Platform$OS.type == "windows") "/" else "", zip_abs)
+zz_url <- ZarrVcf$open(zip_url)
+expect_equal(zz_url$version(), "0.4")
+expect_equal(zz_url$genotypes(variants = 1:2, samples = 1:2), zz$genotypes(variants = 1:2, samples = 1:2))
+zip_obj <- ZarrObjectStore$open(zip_url)
+zip_grp <- ZarrGroup$open_object_store(zip_obj, "/")
+expect_equal(zip_grp$attributes()$vcf_zarr_version, "0.4")
+
 # ---- VCF index validation is Rust-side and rejects silent truncation ----
 z <- zv("v0.4")
 expect_error(z$genotypes(variants = 1.5, samples = 1), "whole numbers")
