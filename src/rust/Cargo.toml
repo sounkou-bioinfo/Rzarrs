@@ -12,7 +12,6 @@ zarrs = { version = "0.23", default-features = false, features = [
     "filesystem",
     "async",
     "ndarray",
-    "blosc",
     "gzip",
     "zstd",
     "sharding",
@@ -31,7 +30,7 @@ half = "2.7"
 num-complex = "0.4.3"
 
 [features]
-default = ["aws", "zip", "fs"]
+default = ["aws", "zip", "fs", "blosc"]
 http = ["zarrs_object_store/http"]
 aws = ["http", "zarrs_object_store/aws"]
 gcp = ["http", "zarrs_object_store/gcp"]
@@ -39,6 +38,7 @@ azure = ["http", "zarrs_object_store/azure"]
 fs = ["zarrs_object_store/fs"]
 cloud = ["aws", "gcp", "azure"]
 zip = ["dep:zarrs_zip", "dep:rc-zip"]
+blosc = ["zarrs/blosc"]
 altrep = ["savvy/altrep"]
 async-altrep = ["altrep", "tokio/rt-multi-thread", "tokio/sync"]
 simd-cast = []

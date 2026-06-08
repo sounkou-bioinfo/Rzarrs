@@ -587,6 +587,21 @@ fn supported_codec_names() -> &'static [&'static str] {
         "sharding_indexed",
         "sharding-indexed",
         "transpose",
+        #[cfg(feature = "blosc")]
+        "blosc",
+    ]
+}
+
+fn known_codec_names() -> &'static [&'static str] {
+    &[
+        "bytes",
+        "endian",
+        "gzip",
+        "zstd",
+        "crc32c",
+        "sharding_indexed",
+        "sharding-indexed",
+        "transpose",
         "blosc",
     ]
 }
@@ -651,7 +666,7 @@ fn codec_capabilities_to_sexp(codec_names: &[String]) -> savvy::Result<savvy::Se
 
 #[savvy]
 fn rzarrs_codec_capabilities() -> savvy::Result<savvy::Sexp> {
-    let codec_names = supported_codec_names()
+    let codec_names = known_codec_names()
         .iter()
         .map(|codec| codec.to_string())
         .collect::<Vec<_>>();

@@ -93,6 +93,12 @@ else
 fi
 
 # e.g. SAVVY_FEATURES="a b" or --with-rust-features=a,b --> Cargo features.
+# On Windows, keep blosc disabled by default: the vendored C-Blosc build defines
+# pthread symbols that conflict with Rtools' winpthread at final DLL link time.
+if [ -z "${NO_DEFAULT_FEATURES}" ] && [ -z "${SAVVY_FEATURES}" ]; then
+  NO_DEFAULT_FEATURES="--no-default-features"
+  append_feature "aws zip fs"
+fi
 FEATURES="$(printf '%s %s' "${SAVVY_FEATURES}" "${CONFIGURE_FEATURES}" | xargs)"
 if [ -n "${FEATURES}" ]; then
   FEATURE_FLAGS="${NO_DEFAULT_FEATURES} --features '${FEATURES}'"
