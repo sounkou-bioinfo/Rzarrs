@@ -13,6 +13,9 @@ PKG_LIBS = -L$(LIBDIR) -lrzarrs
 
 CARGO_VENDOR_ARGS = --config source.crates-io.replace-with=\"vendored-sources\" --config source.vendored-sources.directory=\"./rust/vendor\"
 CARGO_BUILD_ARGS = --lib --profile $(PROFILE) $(FEATURE_FLAGS) --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR) $(CARGO_VENDOR_ARGS)
+# object_store HTTP clients do not support the Emscripten target. Keep webR
+# builds to virtual/local files and zip stores, and omit cloud and Blosc code.
+CARGO_WASM_BUILD_ARGS = --lib --profile $(PROFILE) --no-default-features --features "fs zip" --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR) $(CARGO_VENDOR_ARGS)
 
 all: $(SHLIB) clean_intermediate
 
@@ -22,6 +25,11 @@ $(STATLIB):
 	# Extract vendored Rust dependencies (created by `cargo vendor`).
 	if [ -f ./rust/vendor.tar.xz ]; then \
 	  tar xf ./rust/vendor.tar.xz -C ./rust; \
+	fi
+	# R CMD build excludes files ending in .lock. Ship the generated copy below
+	# and restore it so every source installation uses the vendored resolution.
+	if [ -f ./rust/Cargo.lock.in ]; then \
+	  cp ./rust/Cargo.lock.in ./rust/Cargo.lock; \
 	fi
 	# In some environments, ~/.cargo/bin might not be included in PATH, so we need
 	# to set it here to ensure cargo can be invoked. It is appended to PATH and
@@ -34,10 +42,19 @@ $(STATLIB):
 	  if [ "$(TARGET)" != "wasm32-unknown-emscripten" ]; then \
 	    cargo build $(CARGO_BUILD_ARGS); \
 	  else \
+	    RUST_STD_VENDOR="$$(rustc +nightly --print sysroot)/lib/rustlib/src/rust/library/vendor" && \
+	    if [ ! -d "$$RUST_STD_VENDOR" ]; then \
+	      echo "error: nightly Rust standard-library vendor directory is required for offline Wasm builds: $$RUST_STD_VENDOR" >&2; \
+	      exit 1; \
+	    fi && \
+	    cp -a "$$RUST_STD_VENDOR"/. ./rust/vendor/ && \
+	    export HOST_CC="gcc" && \
+	    export CFLAGS_wasm32_unknown_emscripten="$(CFLAGS)" && \
+	    unset CFLAGS && \
 	    export CARGO_PROFILE_DEV_PANIC="abort" && \
 	    export CARGO_PROFILE_RELEASE_PANIC="abort" && \
 	    export RUSTFLAGS="$(RUSTFLAGS) -Zdefault-visibility=hidden" && \
-	    cargo +nightly build $(CARGO_BUILD_ARGS) --target $(TARGET) -Zbuild-std=panic_abort,std; \
+	    cargo +nightly build $(CARGO_WASM_BUILD_ARGS) --target $(TARGET) -Zbuild-std=panic_abort,std; \
 	  fi
 
 clean_intermediate: $(SHLIB)

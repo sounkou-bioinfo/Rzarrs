@@ -55,4 +55,4 @@ make vendor-rust
 # or: tools/vendor_rust_deps.sh
 ```
 
-The vendoring script runs `cargo vendor`, applies all patches in `tools/vendor-patches/`, updates the affected vendored Cargo checksum files, and writes a normalized `src/rust/vendor.tar.xz`. Use `tools/vendor_rust_deps.sh --keep-vendor` when you want to inspect the patched `src/rust/vendor/` tree locally.
+The vendoring script runs `cargo vendor`, applies all patches in `tools/vendor-patches/`, updates the affected vendored Cargo checksum files, and writes a normalized `src/rust/vendor.tar.xz`. It also writes `Cargo.lock.in`: `R CMD build` excludes files ending in `.lock`, so the installer restores this packageable copy as `Cargo.lock` before invoking Cargo. Use `tools/vendor_rust_deps.sh --keep-vendor` when you want to inspect the patched `src/rust/vendor/` tree locally.

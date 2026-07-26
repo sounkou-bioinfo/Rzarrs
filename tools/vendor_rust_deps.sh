@@ -23,6 +23,9 @@ esac
 cd "$RUST_DIR"
 rm -rf vendor
 cargo vendor vendor >/dev/null
+# R CMD build excludes Cargo.lock. Keep a packageable copy that Makevars
+# restores before invoking Cargo, so source builds use this exact resolution.
+cp Cargo.lock Cargo.lock.in
 
 PATCHES=""
 if [ -d "$PATCH_DIR" ]; then
