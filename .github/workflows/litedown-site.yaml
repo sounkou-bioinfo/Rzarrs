@@ -30,7 +30,7 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::litedown
+          extra-packages: any::litedown, local::.
 
       - name: Build litedown package site
         uses: yihui/actions/litedown-site@dace1784cf776def9c01a85b5124ebbc40a79576
