@@ -14,8 +14,8 @@ knitr::opts_chunk$set(
 # Rzarrs
 
 <!-- badges: start -->
-[![R-CMD-check](https://github.com/sounkou-bioinfo/Rzarrs/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/Rzarrs/actions/workflows/R-CMD-check.yaml)
-[![Rzarrs status badge](https://sounkou-bioinfo.r-universe.dev/Rzarrs/badges/version)](https://sounkou-bioinfo.r-universe.dev/Rzarrs)
+[![R-CMD-check](https://github.com/RGenomicsETL/Rzarrs/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/RGenomicsETL/Rzarrs/actions/workflows/R-CMD-check.yaml)
+[![Rzarrs status badge](https://rgenomicsetl.r-universe.dev/Rzarrs/badges/version)](https://rgenomicsetl.r-universe.dev/Rzarrs)
 <!-- badges: end -->
 
 R bindings to the [`zarrs`](https://github.com/zarrs/zarrs) Rust library for
@@ -69,7 +69,7 @@ automatically at runtime by the underlying Rust dependency crates.
 install.packages(
   "Rzarrs",
   repos = c(
-    "https://sounkou-bioinfo.r-universe.dev",
+    "https://rgenomicsetl.r-universe.dev",
     "https://cloud.r-project.org"
   )
 )
@@ -88,14 +88,14 @@ installs can enable more providers with configure arguments:
 # Enable GCS in addition to defaults
 install.packages(
   "Rzarrs",
-  repos = c("https://sounkou-bioinfo.r-universe.dev", "https://cloud.r-project.org"),
+  repos = c("https://rgenomicsetl.r-universe.dev", "https://cloud.r-project.org"),
   configure.args = "--enable-gcp"
 )
 
 # Enable all cloud providers: AWS, GCS, and Azure Blob
 install.packages(
   "Rzarrs",
-  repos = c("https://sounkou-bioinfo.r-universe.dev", "https://cloud.r-project.org"),
+  repos = c("https://rgenomicsetl.r-universe.dev", "https://cloud.r-project.org"),
   configure.args = "--enable-all-cloud"
 )
 

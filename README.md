@@ -5,9 +5,9 @@
 
 <!-- badges: start -->
 
-[![R-CMD-check](https://github.com/sounkou-bioinfo/Rzarrs/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/Rzarrs/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/RGenomicsETL/Rzarrs/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/RGenomicsETL/Rzarrs/actions/workflows/R-CMD-check.yaml)
 [![Rzarrs status
-badge](https://sounkou-bioinfo.r-universe.dev/Rzarrs/badges/version)](https://sounkou-bioinfo.r-universe.dev/Rzarrs)
+badge](https://rgenomicsetl.r-universe.dev/Rzarrs/badges/version)](https://rgenomicsetl.r-universe.dev/Rzarrs)
 <!-- badges: end -->
 
 R bindings to the [`zarrs`](https://github.com/zarrs/zarrs) Rust library
@@ -78,7 +78,7 @@ automatically at runtime by the underlying Rust dependency crates.
 install.packages(
   "Rzarrs",
   repos = c(
-    "https://sounkou-bioinfo.r-universe.dev",
+    "https://rgenomicsetl.r-universe.dev",
     "https://cloud.r-project.org"
   )
 )
@@ -99,14 +99,14 @@ enable more providers with configure arguments:
 # Enable GCS in addition to defaults
 install.packages(
   "Rzarrs",
-  repos = c("https://sounkou-bioinfo.r-universe.dev", "https://cloud.r-project.org"),
+  repos = c("https://rgenomicsetl.r-universe.dev", "https://cloud.r-project.org"),
   configure.args = "--enable-gcp"
 )
 
 # Enable all cloud providers: AWS, GCS, and Azure Blob
 install.packages(
   "Rzarrs",
-  repos = c("https://sounkou-bioinfo.r-universe.dev", "https://cloud.r-project.org"),
+  repos = c("https://rgenomicsetl.r-universe.dev", "https://cloud.r-project.org"),
   configure.args = "--enable-all-cloud"
 )
 
@@ -248,10 +248,10 @@ names(grp$attributes())
 #> [1] "vcf_zarr_version"     "vcf_meta_information"
 grp$children(FALSE)
 #> $path
-#> [1] "/call_genotype_phased" "/contig_id"            "/variant_allele"
-#> [4] "/variant_contig"       "/variant_position"     "/filter_id"
-#> [7] "/filter_description"   "/sample_id"            "/call_genotype"
-#>
+#> [1] "/call_genotype_phased" "/contig_id"            "/variant_allele"      
+#> [4] "/variant_contig"       "/variant_position"     "/filter_id"           
+#> [7] "/filter_description"   "/sample_id"            "/call_genotype"       
+#> 
 #> $kind
 #> [1] "array" "array" "array" "array" "array" "array" "array" "array" "array"
 ```
@@ -285,23 +285,23 @@ zv$variant_contig()
 #> [1] "chr1" "chr1" "chr1" "chr2" "chr2"
 zv$variant_allele()
 #>      [,1] [,2]
-#> [1,] "A"  "T"
-#> [2,] "C"  "G"
-#> [3,] "G"  "A"
-#> [4,] "T"  "C"
+#> [1,] "A"  "T" 
+#> [2,] "C"  "G" 
+#> [3,] "G"  "A" 
+#> [4,] "T"  "C" 
 #> [5,] "A"  "G"
 zv$genotypes()
 #> , , 1
-#>
+#> 
 #>      [,1] [,2] [,3]
 #> [1,]    0    0    1
 #> [2,]    0    1    0
 #> [3,]    1    0    1
 #> [4,]   -1    0    1
 #> [5,]    0    0    0
-#>
+#> 
 #> , , 2
-#>
+#> 
 #>      [,1] [,2] [,3]
 #> [1,]    0    1    1
 #> [2,]    1    1    0
@@ -332,13 +332,13 @@ zv_zip$version()
 #> [1] "0.4"
 zv_zip$genotypes(variants = 1:2, samples = 1:2)
 #> , , 1
-#>
+#> 
 #>      [,1] [,2]
 #> [1,]    0    0
 #> [2,]    0    1
-#>
+#> 
 #> , , 2
-#>
+#> 
 #>      [,1] [,2]
 #> [1,]    0    1
 #> [2,]    1    1

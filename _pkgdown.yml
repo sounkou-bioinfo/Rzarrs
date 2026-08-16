@@ -1,4 +1,4 @@
-url: https://sounkou-bioinfo.github.io/Rzarrs/
+url: https://rgenomicsetl.github.io/Rzarrs/
 template:
   bootstrap: 5
 
@@ -6,13 +6,13 @@ articles:
   - title: Getting Started
     navbar: ~
     contents:
-      - getting-started
+      - "`getting-started`"
   - title: Reading Arrays
     navbar: ~
     contents:
-      - dtype-mapping
+      - "`dtype-mapping`"
       - subsetting
   - title: Internals
     navbar: ~
     contents:
-      - codec-simd
+      - "`codec-simd`"
