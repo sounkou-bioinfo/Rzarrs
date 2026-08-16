@@ -37,6 +37,16 @@ jobs:
         with:
           site-dir: site
 
+      - name: Render runnable examples
+        run: |
+          examples <- list.files(
+            "site/examples",
+            pattern = "[.](R|Rmd)$",
+            full.names = TRUE
+          )
+          for (example in examples) litedown::fuse(example)
+        shell: Rscript {0}
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
