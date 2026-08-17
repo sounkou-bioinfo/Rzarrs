@@ -15,7 +15,16 @@ The benchmark refuses to time a fixture until `Rzarrs` and `Rarr` return
 identical dimensions and values. It deliberately does **not** treat Zarr-VCF,
 ZIP stores, strings, partial reads, transpose, or remote object stores as part
 of this first comparison. Add each only after creating an interoperable fixture
-and an equivalent-result check.
+and an equivalent-result check. Timed medians exclude R/Python process and
+library startup: packages/APIs load first, then every timed iteration opens the
+fixture and fully materializes its array. Opening is intentionally part of the
+request-level workload.
+
+Each runner records current toolchains, build-affecting environment variables,
+release-profile settings, binary hashes, and compiler comments. That is
+provenance, **not proof** of the original installed Rarr compilation flags. A
+claim that the gap is independent of flags requires a clean, logged source
+rebuild of both R packages and a rerun of this same matrix.
 
 ## Prepare fixtures
 

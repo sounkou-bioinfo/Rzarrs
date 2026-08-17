@@ -62,12 +62,17 @@ def fixture_contract(store: Path) -> tuple[tuple[int, int], int]:
     return (rows, columns), rows * columns
 
 
-def materialize(store_path: Path):
+def load_api():
     from zarrista import Array
     from zarrista.store import FilesystemStore
 
-    store = FilesystemStore(str(store_path))
-    array = Array.open(store, path="/")
+    return Array, FilesystemStore
+
+
+def materialize(store_path: Path, api):
+    array_type, store_type = api
+    store = store_type(str(store_path))
+    array = array_type.open(store, path="/")
     return array[...].to_numpy()
 
 
@@ -88,19 +93,20 @@ def main() -> None:
     import zarrista
 
     contract = fixture_contract(args.store)
+    api = load_api()
     if args.verify:
-        validate(materialize(args.store), contract)
+        validate(materialize(args.store, api), contract)
         print(f"verified {args.store}")
         return
 
     if args.mode == "warm":
-        validate(materialize(args.store), contract)
+        validate(materialize(args.store, api), contract)
     gc.collect()
 
     elapsed: list[float] = []
     for _ in range(args.iterations):
         started = time.perf_counter()
-        value = materialize(args.store)
+        value = materialize(args.store, api)
         elapsed.append(time.perf_counter() - started)
         validate(value, contract)
         del value
@@ -110,6 +116,8 @@ def main() -> None:
     summary = {
         "implementation": "Zarrista",
         "runtime": "Python",
+        "measurement_scope": "loaded runtime; open plus full array materialization",
+        "startup_included": False,
         "mode": args.mode,
         "store": str(args.store.resolve()),
         "iterations_requested": args.iterations,

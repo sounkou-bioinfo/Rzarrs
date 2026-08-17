@@ -37,10 +37,15 @@ into the Rzarrs-versus-Rarr speedup.
 ## Method
 
 The driver uses `bench::mark()` for per-process elapsed-time and allocation
-measurements. Each implementation runs in a separate, fresh R process. The
-shell runner binds that process to one physical CPU and its NUMA memory node
-with `taskset` and `numactl`, records GNU `time -v`, and alternates tool order
-by replicate.
+measurements. Package loading occurs before `bench::mark()`; Zarrista likewise
+imports its Python API before `time.perf_counter()` starts. Thus `median_s`
+measures a meaningful request—open the store/array and fully materialize its
+payload—not R/Python process or library startup. GNU `time -v` deliberately
+remains process-inclusive, but is used only for peak RSS and CPU diagnostics,
+not the elapsed-time denominator. Each implementation runs in a separate,
+fresh process. The shell runner binds that process to one physical CPU and its
+NUMA memory node with `taskset` and `numactl`, records GNU `time -v`, and
+alternates tool order by replicate.
 
 The baseline is deliberately single-threaded. Neither implementation has a
 matched documented read-thread knob, so a multi-core taskset would not
@@ -264,6 +269,87 @@ if (nrow(zarrista_runs)) {
   cat("No Zarrista artifacts supplied.\n")
 }
 ```
+
+## Visual comparisons
+
+These plots include all three readers. Zarrista remains a Python/NumPy context
+point; visual proximity is not an R-binding claim. The timed operation is the
+loaded-runtime, open-and-materialize request recorded in `measurement_scope`.
+
+```{r reader-plots, fig.width=11, fig.height=7}
+if (nrow(r_runs) && nrow(zarrista_runs)) {
+  plot_runs <- rbind(
+    r_runs[c("implementation", "mode", "codec", "median_s", "throughput_mib_s", "max_rss_mib")],
+    zarrista_runs[c("implementation", "mode", "codec", "median_s", "throughput_mib_s", "max_rss_mib")]
+  )
+  plot_runs$workload <- paste(plot_runs$mode, plot_runs$codec, sep = " / ")
+  summary_runs <- stats::aggregate(
+    plot_runs[c("median_s", "throughput_mib_s", "max_rss_mib")],
+    by = list(implementation = plot_runs$implementation, workload = plot_runs$workload),
+    FUN = stats::median,
+    na.rm = TRUE
+  )
+  implementations <- c("Rarr", "Rzarrs", "Zarrista")
+  workloads <- c("cold / bytes", "warm / bytes", "cold / gzip(level=1)", "warm / gzip(level=1)")
+  colours <- c(Rarr = "#0072B2", Rzarrs = "#D55E00", Zarrista = "#009E73")
+
+  draw_metric <- function(metric, label) {
+    old <- par(mfrow = c(2, 2), mar = c(4, 8, 3, 2))
+    on.exit(par(old), add = TRUE)
+    for (workload in workloads) {
+      values <- summary_runs[summary_runs$workload == workload, c("implementation", metric)]
+      values <- values[match(implementations, values$implementation), ]
+      values <- values[!is.na(values[[metric]]), ]
+      x <- values[[metric]]
+      pad <- c(min(x) / 1.8, max(x) * 1.8)
+      plot(x, seq_along(x), log = "x", xlim = pad, yaxt = "n", pch = 19,
+           col = colours[values$implementation], xlab = label, ylab = "", main = workload)
+      axis(2, at = seq_along(x), labels = values$implementation, las = 1)
+      text(x, seq_along(x), labels = format(signif(x, 4), trim = TRUE), pos = 4, cex = 0.8)
+      grid(col = "grey90")
+    }
+  }
+
+  draw_metric("median_s", "Median seconds (lower is better; log scale)")
+  draw_metric("throughput_mib_s", "MiB/s (higher is better; log scale)")
+  draw_metric("max_rss_mib", "Maximum RSS MiB (process diagnostic; log scale)")
+} else {
+  cat("Rarr, Rzarrs, and Zarrista artifacts are all required for plots.\n")
+}
+```
+
+## Network-bounded S3 matrix
+
+The local-store table above is not a network result. The remote version is a
+separate S3-compatible workload: stage the immutable fixture once into a local
+MinIO bucket, run each client in a dedicated network namespace, and apply the
+same `tc netem` rate and latency in both directions on its veth pair. Record
+MinIO revision, bucket/prefix, object count/bytes, endpoint, latency, rate,
+page-cache mode, and client thread limits. Do not use an unbounded public
+endpoint or fold local and remote results together.
+
+It is gated on a successful equivalent full-array remote probe for all three
+clients: Rarr through its explicit `s3_client`, Rzarrs through
+`ZarrObjectStore`, and Zarrista through an Obstore S3 store. Until that probe
+is executable and equality-checked, the report must say that an all-three
+network comparison is unavailable rather than presenting a two-reader result
+as equivalent.
+
+## Compilation provenance and controlled rebuild gate
+
+The environment blocks record toolchains, binary hashes, and build-affecting
+environment variables. They identify what ran, but compiler identity alone
+does **not** prove flag parity—especially for an already-installed Rarr binary.
+Do not attribute the observed gap to library design until the controlled rebuild
+campaign below reproduces it.
+
+1. Build Rarr and Rzarrs from source in a clean R environment with no user or
+   site Makevars overrides; save every compile and link command.
+2. Pin and record the Rust toolchain, Cargo release profile, C/C++ compiler,
+   C/C++ flags, linker flags, enabled features, and binary SHA-256 hashes.
+3. Re-run this exact fixture, CPU/NUMA/thread/cache matrix on those artifacts.
+4. Report both the installed-artifact and controlled-rebuild tables; only a
+   stable gap across them rules out unknown compilation flags as the cause.
 
 ## Interpretation limits
 

@@ -120,6 +120,8 @@ dir.create(out, recursive = TRUE, showWarnings = FALSE)
 summary <- data.frame(
   implementation = args$implementation,
   runtime = "R",
+  measurement_scope = "loaded runtime; open plus full array materialization",
+  startup_included = FALSE,
   mode = args$mode,
   store = args$store,
   iterations_requested = args$iterations,

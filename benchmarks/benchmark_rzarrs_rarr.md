@@ -10,6 +10,10 @@ Rzarrs versus Rarr: numeric Zarr read benchmark
   - [zarrista environment](#zarrista-environment-1)
 - [Results](#results)
 - [Zarrista context baseline](#zarrista-context-baseline)
+- [Visual comparisons](#visual-comparisons)
+- [Network-bounded S3 matrix](#network-bounded-s3-matrix)
+- [Compilation provenance and controlled rebuild
+  gate](#compilation-provenance-and-controlled-rebuild-gate)
 - [Interpretation limits](#interpretation-limits)
 
 ## Scope
@@ -38,10 +42,16 @@ R-binding comparison or folded into the Rzarrs-versus-Rarr speedup.
 ## Method
 
 The driver uses `bench::mark()` for per-process elapsed-time and
-allocation measurements. Each implementation runs in a separate, fresh R
-process. The shell runner binds that process to one physical CPU and its
-NUMA memory node with `taskset` and `numactl`, records GNU `time -v`,
-and alternates tool order by replicate.
+allocation measurements. Package loading occurs before `bench::mark()`;
+Zarrista likewise imports its Python API before `time.perf_counter()`
+starts. Thus `median_s` measures a meaningful request—open the
+store/array and fully materialize its payload—not R/Python process or
+library startup. GNU `time -v` deliberately remains process-inclusive,
+but is used only for peak RSS and CPU diagnostics, not the elapsed-time
+denominator. Each implementation runs in a separate, fresh process. The
+shell runner binds that process to one physical CPU and its NUMA memory
+node with `taskset` and `numactl`, records GNU `time -v`, and alternates
+tool order by replicate.
 
 The baseline is deliberately single-threaded. Neither implementation has
 a matched documented read-thread knob, so a multi-core taskset would not
@@ -277,66 +287,66 @@ if (has_results) {
 #> 59 /tmp/rzarrs-rarr-fixtures/numeric-uncompressed.zarr                    5
 #> 60 /tmp/rzarrs-rarr-fixtures/numeric-uncompressed.zarr                    5
 #>    iterations_completed      min_s   median_s     mean_s   total_s
-#> 1                     1 0.31599651 0.31599651         NA 0.3159965
-#> 2                     1 0.31765519 0.31765519         NA 0.3176552
-#> 3                     1 0.32197893 0.32197893         NA 0.3219789
-#> 4                     1 0.31720492 0.31720492         NA 0.3172049
-#> 5                     1 0.32083730 0.32083730         NA 0.3208373
-#> 6                     1 0.85746759 0.85746759         NA 0.8574676
-#> 7                     1 0.85168095 0.85168095         NA 0.8516809
-#> 8                     1 0.85355194 0.85355194         NA 0.8535519
-#> 9                     1 0.85967981 0.85967981         NA 0.8596798
-#> 10                    1 0.86041003 0.86041003         NA 0.8604100
-#> 11                    1 0.17995519 0.17995519         NA 0.1799552
-#> 12                    1 0.18380203 0.18380203         NA 0.1838020
-#> 13                    1 0.18096327 0.18096327         NA 0.1809633
-#> 14                    1 0.18198819 0.18198819         NA 0.1819882
-#> 15                    1 0.17965752 0.17965752         NA 0.1796575
-#> 16                    1 0.73387640 0.73387640         NA 0.7338764
-#> 17                    1 0.72903540 0.72903540         NA 0.7290354
-#> 18                    1 0.74046821 0.74046821         NA 0.7404682
-#> 19                    1 0.73478915 0.73478915         NA 0.7347892
-#> 20                    1 0.72963147 0.72963147         NA 0.7296315
-#> 21                    1 0.26010010 0.26010010 0.26010010 0.2601001
-#> 22                    1 0.25250842 0.25250842 0.25250842 0.2525084
-#> 23                    1 0.25455625 0.25455625 0.25455625 0.2545562
-#> 24                    1 0.25374630 0.25374630 0.25374630 0.2537463
-#> 25                    1 0.25542741 0.25542741 0.25542741 0.2554274
-#> 26                    1 0.18308101 0.18308101 0.18308101 0.1830810
-#> 27                    1 0.17812832 0.17812832 0.17812832 0.1781283
-#> 28                    1 0.17896134 0.17896134 0.17896134 0.1789613
-#> 29                    1 0.17865147 0.17865147 0.17865147 0.1786515
-#> 30                    1 0.18353335 0.18353335 0.18353335 0.1835334
-#> 31                    5 0.26347468 0.29052644         NA 1.4565345
-#> 32                    5 0.26450352 0.29423072         NA 1.4670741
-#> 33                    5 0.26477590 0.29061265         NA 1.4642787
-#> 34                    5 0.26909645 0.28907810         NA 1.4698760
-#> 35                    5 0.26626920 0.29336680         NA 1.4769648
-#> 36                    5 0.83576277 0.84436259         NA 4.2415980
-#> 37                    5 0.82781512 0.84026756         NA 4.2109205
-#> 38                    5 0.83157292 0.83707326         NA 4.2157881
-#> 39                    5 0.82615969 0.83594256         NA 4.2041925
-#> 40                    5 0.82609125 0.83448202         NA 4.2123609
-#> 41                    5 0.14048681 0.14435522         NA 0.7271419
-#> 42                    5 0.14091057 0.14421901         NA 0.7274651
-#> 43                    5 0.14062472 0.14358213         NA 0.7257756
-#> 44                    5 0.13817422 0.14376706         NA 0.7161481
-#> 45                    5 0.13874239 0.14371393         NA 0.7242585
-#> 46                    5 0.70189920 0.71215310         NA 3.6312625
-#> 47                    5 0.70885757 0.72301229         NA 3.6443612
-#> 48                    5 0.70481503 0.70908980         NA 3.6017998
-#> 49                    5 0.70816702 0.72356946         NA 3.6301896
-#> 50                    5 0.71039815 0.72389632         NA 3.6396807
-#> 51                    5 0.16330017 0.16349549 0.16412651 0.8206326
-#> 52                    5 0.16311178 0.16368497 0.16379692 0.8189846
-#> 53                    5 0.16217038 0.16440826 0.16432453 0.8216227
-#> 54                    5 0.16081855 0.16175614 0.16225143 0.8112571
-#> 55                    5 0.16175194 0.16277824 0.16289980 0.8144990
-#> 56                    5 0.02351166 0.02436167 0.02465782 0.1232891
-#> 57                    5 0.02389186 0.02476281 0.02480405 0.1240203
-#> 58                    5 0.02389761 0.02469123 0.02464208 0.1232104
-#> 59                    5 0.02402825 0.02495804 0.02495052 0.1247526
-#> 60                    5 0.02468920 0.02485490 0.02511981 0.1255990
+#> 1                     1 0.31603994 0.31603994         NA 0.3160399
+#> 2                     1 0.32904216 0.32904216         NA 0.3290422
+#> 3                     1 0.31678329 0.31678329         NA 0.3167833
+#> 4                     1 0.31484004 0.31484004         NA 0.3148400
+#> 5                     1 0.31549690 0.31549690         NA 0.3154969
+#> 6                     1 0.85823738 0.85823738         NA 0.8582374
+#> 7                     1 0.88729990 0.88729990         NA 0.8872999
+#> 8                     1 0.85166806 0.85166806         NA 0.8516681
+#> 9                     1 0.87299482 0.87299482         NA 0.8729948
+#> 10                    1 0.85399855 0.85399855         NA 0.8539985
+#> 11                    1 0.18549142 0.18549142         NA 0.1854914
+#> 12                    1 0.18092794 0.18092794         NA 0.1809279
+#> 13                    1 0.17847855 0.17847855         NA 0.1784786
+#> 14                    1 0.18035478 0.18035478         NA 0.1803548
+#> 15                    1 0.18386489 0.18386489         NA 0.1838649
+#> 16                    1 0.73556148 0.73556148         NA 0.7355615
+#> 17                    1 0.73625696 0.73625696         NA 0.7362570
+#> 18                    1 0.76573469 0.76573469         NA 0.7657347
+#> 19                    1 0.74702589 0.74702589         NA 0.7470259
+#> 20                    1 0.74129033 0.74129033         NA 0.7412903
+#> 21                    1 0.26596268 0.26596268 0.26596268 0.2659627
+#> 22                    1 0.26167173 0.26167173 0.26167173 0.2616717
+#> 23                    1 0.26045045 0.26045045 0.26045045 0.2604504
+#> 24                    1 0.26138106 0.26138106 0.26138106 0.2613811
+#> 25                    1 0.26201873 0.26201873 0.26201873 0.2620187
+#> 26                    1 0.19019399 0.19019399 0.19019399 0.1901940
+#> 27                    1 0.19023862 0.19023862 0.19023862 0.1902386
+#> 28                    1 0.18437882 0.18437882 0.18437882 0.1843788
+#> 29                    1 0.17982074 0.17982074 0.17982074 0.1798207
+#> 30                    1 0.18962223 0.18962223 0.18962223 0.1896222
+#> 31                    5 0.26647327 0.29011933         NA 1.4612487
+#> 32                    5 0.26590727 0.29064253         NA 1.4611875
+#> 33                    5 0.26454637 0.29026806         NA 1.4609315
+#> 34                    5 0.26391916 0.29080303         NA 1.4577625
+#> 35                    5 0.26255677 0.28952439         NA 1.4621039
+#> 36                    5 0.83478512 0.85684983         NA 4.2670034
+#> 37                    5 0.82087941 0.83135917         NA 4.2005790
+#> 38                    5 0.82728028 0.83635938         NA 4.2086511
+#> 39                    5 0.83043430 0.83448650         NA 4.2224146
+#> 40                    5 0.82738273 0.83807966         NA 4.2180482
+#> 41                    5 0.14128822 0.14503137         NA 0.7238185
+#> 42                    5 0.14171986 0.14570346         NA 0.7297083
+#> 43                    5 0.13879194 0.14315802         NA 0.7231311
+#> 44                    5 0.13992403 0.14749039         NA 0.7272735
+#> 45                    5 0.13980377 0.14635783         NA 0.7262257
+#> 46                    5 0.71074654 0.72019015         NA 3.6286255
+#> 47                    5 0.71118048 0.71660520         NA 3.6182070
+#> 48                    5 0.70588468 0.72525671         NA 3.6098870
+#> 49                    5 0.70224736 0.70801273         NA 3.5809895
+#> 50                    5 0.70157044 0.70753109         NA 3.5877947
+#> 51                    5 0.16156030 0.16364576 0.16348115 0.8174058
+#> 52                    5 0.16217620 0.16281385 0.16314667 0.8157334
+#> 53                    5 0.16162873 0.16299920 0.16307323 0.8153661
+#> 54                    5 0.16321390 0.16479233 0.16489930 0.8244965
+#> 55                    5 0.16211769 0.16404862 0.16385995 0.8192997
+#> 56                    5 0.02340581 0.02487613 0.02469716 0.1234858
+#> 57                    5 0.02339384 0.02439881 0.02457748 0.1228874
+#> 58                    5 0.02381537 0.02526651 0.02492383 0.1246192
+#> 59                    5 0.02418276 0.02508442 0.02500220 0.1250110
+#> 60                    5 0.02371060 0.02424605 0.02457812 0.1228906
 #>    mem_alloc_bytes gc_count r_version rzarrs_version rarr_version bench_version
 #> 1        427535464        5     4.6.0          0.1.0       2.1.35         1.1.4
 #> 2        427535464        5     4.6.0          0.1.0       2.1.35         1.1.4
@@ -460,127 +470,127 @@ if (has_results) {
 #> 59 /tmp/rzarrs-rarr-results/warm/zarrista/numeric-uncompressed.zarr/Zarrista/rep-4
 #> 60 /tmp/rzarrs-rarr-results/warm/zarrista/numeric-uncompressed.zarr/Zarrista/rep-5
 #>                      fixture logical_bytes         codec max_rss_mib
-#> 1          numeric-gzip.zarr      67108864 gzip(level=1)    394.3203
+#> 1          numeric-gzip.zarr      67108864 gzip(level=1)    394.1641
 #> 2          numeric-gzip.zarr      67108864 gzip(level=1)    394.4766
-#> 3          numeric-gzip.zarr      67108864 gzip(level=1)    394.3164
-#> 4          numeric-gzip.zarr      67108864 gzip(level=1)    394.4805
+#> 3          numeric-gzip.zarr      67108864 gzip(level=1)    394.4766
+#> 4          numeric-gzip.zarr      67108864 gzip(level=1)    394.4766
 #> 5          numeric-gzip.zarr      67108864 gzip(level=1)    394.3203
-#> 6          numeric-gzip.zarr      67108864 gzip(level=1)    314.9844
-#> 7          numeric-gzip.zarr      67108864 gzip(level=1)    314.9883
+#> 6          numeric-gzip.zarr      67108864 gzip(level=1)    315.1445
+#> 7          numeric-gzip.zarr      67108864 gzip(level=1)    315.1484
 #> 8          numeric-gzip.zarr      67108864 gzip(level=1)    314.8320
-#> 9          numeric-gzip.zarr      67108864 gzip(level=1)    314.8359
-#> 10         numeric-gzip.zarr      67108864 gzip(level=1)    315.1406
-#> 11 numeric-uncompressed.zarr      67108864         bytes    369.1641
+#> 9          numeric-gzip.zarr      67108864 gzip(level=1)    314.9883
+#> 10         numeric-gzip.zarr      67108864 gzip(level=1)    314.9844
+#> 11 numeric-uncompressed.zarr      67108864         bytes    369.3203
 #> 12 numeric-uncompressed.zarr      67108864         bytes    369.0078
-#> 13 numeric-uncompressed.zarr      67108864         bytes    369.1680
-#> 14 numeric-uncompressed.zarr      67108864         bytes    369.1641
-#> 15 numeric-uncompressed.zarr      67108864         bytes    369.3203
-#> 16 numeric-uncompressed.zarr      67108864         bytes    314.0859
-#> 17 numeric-uncompressed.zarr      67108864         bytes    313.9336
-#> 18 numeric-uncompressed.zarr      67108864         bytes    313.9336
-#> 19 numeric-uncompressed.zarr      67108864         bytes    314.2461
-#> 20 numeric-uncompressed.zarr      67108864         bytes    314.0859
-#> 21         numeric-gzip.zarr      67108864 gzip(level=1)    106.5273
-#> 22         numeric-gzip.zarr      67108864 gzip(level=1)    106.6719
-#> 23         numeric-gzip.zarr      67108864 gzip(level=1)    106.5195
-#> 24         numeric-gzip.zarr      67108864 gzip(level=1)    106.5117
-#> 25         numeric-gzip.zarr      67108864 gzip(level=1)    106.6758
-#> 26 numeric-uncompressed.zarr      67108864         bytes    105.6289
-#> 27 numeric-uncompressed.zarr      67108864         bytes    105.9336
-#> 28 numeric-uncompressed.zarr      67108864         bytes    105.8984
-#> 29 numeric-uncompressed.zarr      67108864         bytes    105.8555
-#> 30 numeric-uncompressed.zarr      67108864         bytes    105.8984
-#> 31         numeric-gzip.zarr      67108864 gzip(level=1)    434.4453
-#> 32         numeric-gzip.zarr      67108864 gzip(level=1)    434.4453
+#> 13 numeric-uncompressed.zarr      67108864         bytes    369.1641
+#> 14 numeric-uncompressed.zarr      67108864         bytes    369.3203
+#> 15 numeric-uncompressed.zarr      67108864         bytes    369.3242
+#> 16 numeric-uncompressed.zarr      67108864         bytes    313.9297
+#> 17 numeric-uncompressed.zarr      67108864         bytes    314.0859
+#> 18 numeric-uncompressed.zarr      67108864         bytes    313.9258
+#> 19 numeric-uncompressed.zarr      67108864         bytes    314.2422
+#> 20 numeric-uncompressed.zarr      67108864         bytes    313.9297
+#> 21         numeric-gzip.zarr      67108864 gzip(level=1)    106.6914
+#> 22         numeric-gzip.zarr      67108864 gzip(level=1)    106.6914
+#> 23         numeric-gzip.zarr      67108864 gzip(level=1)    106.5352
+#> 24         numeric-gzip.zarr      67108864 gzip(level=1)    106.6914
+#> 25         numeric-gzip.zarr      67108864 gzip(level=1)    106.6953
+#> 26 numeric-uncompressed.zarr      67108864         bytes    105.9531
+#> 27 numeric-uncompressed.zarr      67108864         bytes    105.7266
+#> 28 numeric-uncompressed.zarr      67108864         bytes    105.9570
+#> 29 numeric-uncompressed.zarr      67108864         bytes    105.8906
+#> 30 numeric-uncompressed.zarr      67108864         bytes    105.7305
+#> 31         numeric-gzip.zarr      67108864 gzip(level=1)    434.6016
+#> 32         numeric-gzip.zarr      67108864 gzip(level=1)    434.6016
 #> 33         numeric-gzip.zarr      67108864 gzip(level=1)    434.4453
-#> 34         numeric-gzip.zarr      67108864 gzip(level=1)    434.2891
-#> 35         numeric-gzip.zarr      67108864 gzip(level=1)    434.2930
-#> 36         numeric-gzip.zarr      67108864 gzip(level=1)    443.4414
-#> 37         numeric-gzip.zarr      67108864 gzip(level=1)    443.4336
-#> 38         numeric-gzip.zarr      67108864 gzip(level=1)    443.4297
-#> 39         numeric-gzip.zarr      67108864 gzip(level=1)    443.2773
-#> 40         numeric-gzip.zarr      67108864 gzip(level=1)    443.4375
-#> 41 numeric-uncompressed.zarr      67108864         bytes    397.8945
-#> 42 numeric-uncompressed.zarr      67108864         bytes    397.8945
-#> 43 numeric-uncompressed.zarr      67108864         bytes    397.8984
-#> 44 numeric-uncompressed.zarr      67108864         bytes    397.7383
-#> 45 numeric-uncompressed.zarr      67108864         bytes    398.0508
-#> 46 numeric-uncompressed.zarr      67108864         bytes    442.3633
-#> 47 numeric-uncompressed.zarr      67108864         bytes    442.3711
-#> 48 numeric-uncompressed.zarr      67108864         bytes    442.6914
-#> 49 numeric-uncompressed.zarr      67108864         bytes    442.2070
-#> 50 numeric-uncompressed.zarr      67108864         bytes    442.3672
-#> 51         numeric-gzip.zarr      67108864 gzip(level=1)    106.7773
-#> 52         numeric-gzip.zarr      67108864 gzip(level=1)    107.0938
-#> 53         numeric-gzip.zarr      67108864 gzip(level=1)    106.9102
-#> 54         numeric-gzip.zarr      67108864 gzip(level=1)    106.9336
-#> 55         numeric-gzip.zarr      67108864 gzip(level=1)    106.9375
-#> 56 numeric-uncompressed.zarr      67108864         bytes    106.0391
-#> 57 numeric-uncompressed.zarr      67108864         bytes    106.0469
-#> 58 numeric-uncompressed.zarr      67108864         bytes    106.2422
-#> 59 numeric-uncompressed.zarr      67108864         bytes    106.0391
-#> 60 numeric-uncompressed.zarr      67108864         bytes    106.0938
+#> 34         numeric-gzip.zarr      67108864 gzip(level=1)    434.6016
+#> 35         numeric-gzip.zarr      67108864 gzip(level=1)    434.4492
+#> 36         numeric-gzip.zarr      67108864 gzip(level=1)    443.5938
+#> 37         numeric-gzip.zarr      67108864 gzip(level=1)    443.7461
+#> 38         numeric-gzip.zarr      67108864 gzip(level=1)    443.5859
+#> 39         numeric-gzip.zarr      67108864 gzip(level=1)    443.5898
+#> 40         numeric-gzip.zarr      67108864 gzip(level=1)    443.5938
+#> 41 numeric-uncompressed.zarr      67108864         bytes    398.0508
+#> 42 numeric-uncompressed.zarr      67108864         bytes    397.8984
+#> 43 numeric-uncompressed.zarr      67108864         bytes    398.0547
+#> 44 numeric-uncompressed.zarr      67108864         bytes    398.2031
+#> 45 numeric-uncompressed.zarr      67108864         bytes    398.0547
+#> 46 numeric-uncompressed.zarr      67108864         bytes    442.6797
+#> 47 numeric-uncompressed.zarr      67108864         bytes    442.8359
+#> 48 numeric-uncompressed.zarr      67108864         bytes    442.8359
+#> 49 numeric-uncompressed.zarr      67108864         bytes    442.6797
+#> 50 numeric-uncompressed.zarr      67108864         bytes    442.6797
+#> 51         numeric-gzip.zarr      67108864 gzip(level=1)    107.3984
+#> 52         numeric-gzip.zarr      67108864 gzip(level=1)    107.4102
+#> 53         numeric-gzip.zarr      67108864 gzip(level=1)    107.2383
+#> 54         numeric-gzip.zarr      67108864 gzip(level=1)    107.2617
+#> 55         numeric-gzip.zarr      67108864 gzip(level=1)    107.2578
+#> 56 numeric-uncompressed.zarr      67108864         bytes    106.5820
+#> 57 numeric-uncompressed.zarr      67108864         bytes    106.5312
+#> 58 numeric-uncompressed.zarr      67108864         bytes    106.3789
+#> 59 numeric-uncompressed.zarr      67108864         bytes    106.5781
+#> 60 numeric-uncompressed.zarr      67108864         bytes    106.5273
 #>    cpu_percent throughput_mib_s
-#> 1           89        202.53388
-#> 2           89        201.47632
-#> 3           89        198.77077
-#> 4           89        201.76232
-#> 5           89        199.47805
-#> 6           92         74.63839
-#> 7           93         75.14551
-#> 8           93         74.98079
-#> 9           93         74.44632
-#> 10          93         74.38314
-#> 11          85        355.64409
-#> 12          85        348.20073
-#> 13          84        353.66293
-#> 14          85        351.67117
-#> 15          84        356.23335
-#> 16          91         87.20815
-#> 17          90         87.78723
-#> 18          90         86.43180
-#> 19          90         87.09982
-#> 20          90         87.71551
-#> 21          74        246.05912
-#> 22          76        253.45690
-#> 23          77        251.41791
-#> 24          76        252.22043
-#> 25          76        250.56042
-#> 26          54        349.57202
-#> 27          54        359.29155
-#> 28          52        357.61913
-#> 29          52        358.23942
-#> 30          54        348.71046
-#> 31          99        220.28976
-#> 32          99        217.51638
-#> 33          99        220.22441
-#> 34          99        221.39346
-#> 35          99        218.15693
-#> 36          99         75.79682
-#> 37          99         76.16622
-#> 38          99         76.45687
-#> 39          99         76.56028
-#> 40          99         76.69428
-#> 41          99        443.35078
-#> 42          99        443.76952
-#> 43          99        445.73793
-#> 44          99        445.16457
-#> 45          99        445.32914
-#> 46          99         89.86832
-#> 47          99         88.51855
-#> 48          99         90.25655
-#> 49          99         88.45039
-#> 50          99         88.41045
-#> 51          99        391.44810
-#> 52          99        390.99497
-#> 53          99        389.27484
-#> 54         100        395.65731
-#> 55          99        393.17294
-#> 56          99       2627.07770
-#> 57         100       2584.52098
-#> 58         100       2592.01367
-#> 59          99       2564.30425
-#> 60          99       2574.94476
+#> 1           89        202.50605
+#> 2           90        194.50395
+#> 3           89        202.03086
+#> 4           89        203.27783
+#> 5           89        202.85461
+#> 6           92         74.57144
+#> 7           93         72.12894
+#> 8           93         75.14665
+#> 9           93         73.31086
+#> 10          93         74.94158
+#> 11          85        345.02944
+#> 12          85        353.73199
+#> 13          84        358.58651
+#> 14          85        354.85614
+#> 15          85        348.08168
+#> 16          90         87.00836
+#> 17          91         86.92617
+#> 18          91         83.57986
+#> 19          90         85.67307
+#> 20          91         86.33594
+#> 21          72        240.63526
+#> 22          73        244.58126
+#> 23          74        245.72812
+#> 24          74        244.85325
+#> 25          74        244.25735
+#> 26          52        336.49854
+#> 27          52        336.41960
+#> 28          49        347.11145
+#> 29          51        355.91000
+#> 30          53        337.51318
+#> 31          99        220.59888
+#> 32          99        220.20177
+#> 33          99        220.48585
+#> 34          99        220.08024
+#> 35          99        221.05219
+#> 36          99         74.69220
+#> 37          99         76.98237
+#> 38          99         76.52213
+#> 39          99         76.69387
+#> 40          99         76.36506
+#> 41          98        441.28383
+#> 42          99        439.24832
+#> 43          98        447.05843
+#> 44          99        433.92656
+#> 45          99        437.28442
+#> 46          99         88.86542
+#> 47          99         89.30998
+#> 48          99         88.24462
+#> 49          99         90.39385
+#> 50          99         90.45539
+#> 51          99        391.08866
+#> 52          99        393.08696
+#> 53          99        392.63996
+#> 54          99        388.36759
+#> 55          99        390.12825
+#> 56          99       2572.74795
+#> 57          99       2623.07862
+#> 58         100       2532.99691
+#> 59         100       2551.38400
+#> 60          99       2639.60541
 r_runs <- if (nrow(runs)) subset(runs, runtime == "R") else runs
 zarrista_runs <- if (nrow(runs)) subset(runs, implementation == "Zarrista") else runs
 ```
@@ -606,9 +616,9 @@ if (has_results) {
 
 ``` text
 command: tools/run_rzarrs_rarr_bench.sh /tmp/rzarrs-rarr-results/cold/environment.txt --fixtures /tmp/rzarrs-rarr-fixtures --out /tmp/rzarrs-rarr-results --cpuset 0 --numa-node 0 --mode cold --reps 5
-source_revision: ab0b24cc8b206e008a9a1d8d1ecf207cd03e15d8
+source_revision: 713b65f3bbadb0fbab249f841d0130e5b3f36a9a
 source_status:
-date_utc: 2026-08-17T19:42:23+00:00
+date_utc: 2026-08-17T20:37:33+00:00
 uname: Linux Ubuntu-2404-noble-amd64-base 6.8.0-78-generic #78-Ubuntu SMP PREEMPT_DYNAMIC Tue Aug 12 11:34:18 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
 cpuset: 0
 numa_node: 0
@@ -623,6 +633,308 @@ MKL_NUM_THREADS=1
 VECLIB_MAXIMUM_THREADS=1
 RAYON_NUM_THREADS=1
 TOKIO_WORKER_THREADS=1
+current_build_environment_not_retrospective_flags:
+CARGO_ENCODED_RUSTFLAGS=<unset>
+CARGO_PROFILE_RELEASE_LTO=<unset>
+CARGO_PROFILE_RELEASE_CODEGEN_UNITS=<unset>
+RUSTFLAGS=<unset>
+CC=<unset>
+CXX=<unset>
+CFLAGS=<unset>
+CXXFLAGS=<unset>
+CPPFLAGS=<unset>
+LDFLAGS=<unset>
+MAKEFLAGS=<unset>
+current_R_build_configuration:
+CC=x86_64-linux-gnu-gcc -std=gnu2x
+CFLAGS=-g -O2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -ffile-prefix-map=/build/r-base-cbKgDj/r-base-4.6.0=. -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -fcf-protection -fdebug-prefix-map=/build/r-base-cbKgDj/r-base-4.6.0=/usr/src/r-base-4.6.0-2.2404.0 -Wdate-time -D_FORTIFY_SOURCE=3
+CPPFLAGS=
+CXX=x86_64-linux-gnu-g++ -std=gnu++20
+CXXFLAGS=-g -O2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -ffile-prefix-map=/build/r-base-cbKgDj/r-base-4.6.0=. -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -fcf-protection -fdebug-prefix-map=/build/r-base-cbKgDj/r-base-4.6.0=/usr/src/r-base-4.6.0-2.2404.0 -Wdate-time -D_FORTIFY_SOURCE=3
+CXX11='config' variable 'CXX11' is defunct
+CXX11FLAGS='config' variable 'CXX11FLAGS' is defunct
+LDFLAGS=-Wl,-Bsymbolic-functions -flto=auto -ffat-lto-objects -Wl,-z,relro
+Rust_toolchain:
+rustc 1.96.1 (31fca3adb 2026-06-26)
+binary: rustc
+commit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd
+commit-date: 2026-06-26
+host: x86_64-unknown-linux-gnu
+release: 1.96.1
+LLVM version: 22.1.2
+cargo 1.96.1 (356927216 2026-06-26)
+Rzarrs_Cargo_release_profile:
+46:[profile.release]
+47-panic = "abort"
+48-lto = true
+49-codegen-units = 1
+installed_reader_artifacts:
+package=Rzarrs
+version=0.1.0
+artifact=/usr/local/lib/R/site-library/Rzarrs/libs/Rzarrs.so
+2c617e61ba3088d0a2878239ce8e879c7b088cd58edf72d8f4791eaef26e11c3  /usr/local/lib/R/site-library/Rzarrs/libs/Rzarrs.so
+
+String dump of section '.comment':
+  [     0]  GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+  [    2d]  rustc version 1.91.1 (ed61e7d7e 2025-11-07)
+
+
+package=Rarr
+version=2.1.35
+artifact=/usr/local/lib/R/site-library/Rarr/libs/Rarr.so
+3ecb66836520282d9f33e0538f21865d4bcb9d18764778fcdfe6fc6d3858dfee  /usr/local/lib/R/site-library/Rarr/libs/Rarr.so
+
+String dump of section '.comment':
+  [     0]  GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+
+
+lscpu:
+Architecture:                         x86_64
+CPU op-mode(s):                       32-bit, 64-bit
+Address sizes:                        46 bits physical, 48 bits virtual
+Byte Order:                           Little Endian
+CPU(s):                               20
+On-line CPU(s) list:                  0-19
+Vendor ID:                            GenuineIntel
+BIOS Vendor ID:                       Intel(R) Corporation
+Model name:                           13th Gen Intel(R) Core(TM) i5-13500
+BIOS Model name:                      13th Gen Intel(R) Core(TM) i5-13500 To Be Filled By O.E.M. CPU @ 2.4GHz
+BIOS CPU family:                      205
+CPU family:                           6
+Model:                                191
+Thread(s) per core:                   2
+Core(s) per socket:                   14
+Socket(s):                            1
+Stepping:                             2
+CPU(s) scaling MHz:                   31%
+CPU max MHz:                          4800.0000
+CPU min MHz:                          800.0000
+BogoMIPS:                             4992.00
+Flags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq tme rdpid movdiri movdir64b fsrm md_clear serialize pconfig arch_lbr ibt flush_l1d arch_capabilities
+Virtualization:                       VT-x
+L1d cache:                            544 KiB (14 instances)
+L1i cache:                            704 KiB (14 instances)
+L2 cache:                             11.5 MiB (8 instances)
+L3 cache:                             24 MiB (1 instance)
+NUMA node(s):                         1
+NUMA node0 CPU(s):                    0-19
+Vulnerability Gather data sampling:   Not affected
+Vulnerability Itlb multihit:          Not affected
+Vulnerability L1tf:                   Not affected
+Vulnerability Mds:                    Not affected
+Vulnerability Meltdown:               Not affected
+Vulnerability Mmio stale data:        Not affected
+Vulnerability Reg file data sampling: Mitigation; Clear Register File
+Vulnerability Retbleed:               Not affected
+Vulnerability Spec rstack overflow:   Not affected
+Vulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization
+Vulnerability Spectre v2:             Mitigation; Enhanced / Automatic IBRS; IBPB conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI BHI_DIS_S
+Vulnerability Srbds:                  Not affected
+Vulnerability Tsx async abort:        Not affected
+numactl_hardware:
+available: 1 nodes (0)
+node 0 cpus: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19
+node 0 size: 64081 MB
+node 0 free: 56355 MB
+node distances:
+node   0
+  0:  10
+r_packages:
+Rzarrs=0.1.0
+Rarr=2.1.35
+bench=1.1.4
+```
+
+### zarrista environment
+
+``` text
+command: tools/run_zarrista_bench.sh /tmp/rzarrs-rarr-results/cold/zarrista/environment.txt --fixtures /tmp/rzarrs-rarr-fixtures --out /tmp/rzarrs-rarr-results --python /tmp/zarrista-venv/bin/python --zarrista-revision 92d26b65b90e9715d5c658c71b9216449f25ae64 --cpuset 0 --numa-node 0 --mode cold --reps 5
+source_revision: 713b65f3bbadb0fbab249f841d0130e5b3f36a9a
+source_status:
+date_utc: 2026-08-17T20:38:20+00:00
+uname: Linux Ubuntu-2404-noble-amd64-base 6.8.0-78-generic #78-Ubuntu SMP PREEMPT_DYNAMIC Tue Aug 12 11:34:18 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+cpuset: 0
+numa_node: 0
+mode: cold
+reps: 5
+warm_iterations: 5
+zarrista_revision: 92d26b65b90e9715d5c658c71b9216449f25ae64
+python: Python 3.13.12
+zarrista:
+0.1.0
+/tmp/zarrista-venv/lib/python3.13/site-packages/zarrista/__init__.py
+thread_environment:
+BLOSC_NTHREADS=1
+OMP_NUM_THREADS=1
+OPENBLAS_NUM_THREADS=1
+MKL_NUM_THREADS=1
+VECLIB_MAXIMUM_THREADS=1
+RAYON_NUM_THREADS=1
+TOKIO_WORKER_THREADS=1
+current_build_environment_not_retrospective_flags:
+CARGO_ENCODED_RUSTFLAGS=<unset>
+CARGO_PROFILE_RELEASE_LTO=<unset>
+CARGO_PROFILE_RELEASE_CODEGEN_UNITS=<unset>
+RUSTFLAGS=<unset>
+CC=<unset>
+CXX=<unset>
+CFLAGS=<unset>
+CXXFLAGS=<unset>
+CPPFLAGS=<unset>
+LDFLAGS=<unset>
+MAKEFLAGS=<unset>
+Rust_toolchain:
+rustc 1.96.1 (31fca3adb 2026-06-26)
+binary: rustc
+commit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd
+commit-date: 2026-06-26
+host: x86_64-unknown-linux-gnu
+release: 1.96.1
+LLVM version: 22.1.2
+cargo 1.96.1 (356927216 2026-06-26)
+Python_and_Zarrista_artifacts:
+python_executable=/tmp/zarrista-venv/bin/python
+zarrista_distribution=0.1.0
+artifact=/tmp/zarrista-venv/lib/python3.13/site-packages/zarrista/_zarrista.cpython-313-x86_64-linux-gnu.so
+sha256=4fe67fd37abe3fe8859aece5ef42b8bccd34c142aa5a81f2dc4a4efbfcfec5e0
+
+String dump of section '.comment':
+  [     0]  Linker: LLD 22.1.2 (/checkout/src/llvm-project/llvm 1cb4e3833c1919c2e6fb579a23ac0e2b22587b7e)
+  [    5f]  GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+  [    8c]  rustc version 1.96.1 (31fca3adb 2026-06-26)
+
+
+lscpu:
+Architecture:                         x86_64
+CPU op-mode(s):                       32-bit, 64-bit
+Address sizes:                        46 bits physical, 48 bits virtual
+Byte Order:                           Little Endian
+CPU(s):                               20
+On-line CPU(s) list:                  0-19
+Vendor ID:                            GenuineIntel
+BIOS Vendor ID:                       Intel(R) Corporation
+Model name:                           13th Gen Intel(R) Core(TM) i5-13500
+BIOS Model name:                      13th Gen Intel(R) Core(TM) i5-13500 To Be Filled By O.E.M. CPU @ 2.4GHz
+BIOS CPU family:                      205
+CPU family:                           6
+Model:                                191
+Thread(s) per core:                   2
+Core(s) per socket:                   14
+Socket(s):                            1
+Stepping:                             2
+CPU(s) scaling MHz:                   34%
+CPU max MHz:                          4800.0000
+CPU min MHz:                          800.0000
+BogoMIPS:                             4992.00
+Flags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq tme rdpid movdiri movdir64b fsrm md_clear serialize pconfig arch_lbr ibt flush_l1d arch_capabilities
+Virtualization:                       VT-x
+L1d cache:                            544 KiB (14 instances)
+L1i cache:                            704 KiB (14 instances)
+L2 cache:                             11.5 MiB (8 instances)
+L3 cache:                             24 MiB (1 instance)
+NUMA node(s):                         1
+NUMA node0 CPU(s):                    0-19
+Vulnerability Gather data sampling:   Not affected
+Vulnerability Itlb multihit:          Not affected
+Vulnerability L1tf:                   Not affected
+Vulnerability Mds:                    Not affected
+Vulnerability Meltdown:               Not affected
+Vulnerability Mmio stale data:        Not affected
+Vulnerability Reg file data sampling: Mitigation; Clear Register File
+Vulnerability Retbleed:               Not affected
+Vulnerability Spec rstack overflow:   Not affected
+Vulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization
+Vulnerability Spectre v2:             Mitigation; Enhanced / Automatic IBRS; IBPB conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI BHI_DIS_S
+Vulnerability Srbds:                  Not affected
+Vulnerability Tsx async abort:        Not affected
+numactl_hardware:
+available: 1 nodes (0)
+node 0 cpus: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19
+node 0 size: 64081 MB
+node 0 free: 58412 MB
+node distances:
+node   0
+  0:  10
+```
+
+### warm environment
+
+``` text
+command: tools/run_rzarrs_rarr_bench.sh /tmp/rzarrs-rarr-results/warm/environment.txt --fixtures /tmp/rzarrs-rarr-fixtures --out /tmp/rzarrs-rarr-results --cpuset 0 --numa-node 0 --mode warm --reps 5 --iterations 5
+source_revision: 713b65f3bbadb0fbab249f841d0130e5b3f36a9a
+source_status:
+date_utc: 2026-08-17T20:36:09+00:00
+uname: Linux Ubuntu-2404-noble-amd64-base 6.8.0-78-generic #78-Ubuntu SMP PREEMPT_DYNAMIC Tue Aug 12 11:34:18 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+cpuset: 0
+numa_node: 0
+mode: warm
+reps: 5
+warm_iterations: 5
+thread_environment:
+BLOSC_NTHREADS=1
+OMP_NUM_THREADS=1
+OPENBLAS_NUM_THREADS=1
+MKL_NUM_THREADS=1
+VECLIB_MAXIMUM_THREADS=1
+RAYON_NUM_THREADS=1
+TOKIO_WORKER_THREADS=1
+current_build_environment_not_retrospective_flags:
+CARGO_ENCODED_RUSTFLAGS=<unset>
+CARGO_PROFILE_RELEASE_LTO=<unset>
+CARGO_PROFILE_RELEASE_CODEGEN_UNITS=<unset>
+RUSTFLAGS=<unset>
+CC=<unset>
+CXX=<unset>
+CFLAGS=<unset>
+CXXFLAGS=<unset>
+CPPFLAGS=<unset>
+LDFLAGS=<unset>
+MAKEFLAGS=<unset>
+current_R_build_configuration:
+CC=x86_64-linux-gnu-gcc -std=gnu2x
+CFLAGS=-g -O2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -ffile-prefix-map=/build/r-base-cbKgDj/r-base-4.6.0=. -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -fcf-protection -fdebug-prefix-map=/build/r-base-cbKgDj/r-base-4.6.0=/usr/src/r-base-4.6.0-2.2404.0 -Wdate-time -D_FORTIFY_SOURCE=3
+CPPFLAGS=
+CXX=x86_64-linux-gnu-g++ -std=gnu++20
+CXXFLAGS=-g -O2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -ffile-prefix-map=/build/r-base-cbKgDj/r-base-4.6.0=. -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -fcf-protection -fdebug-prefix-map=/build/r-base-cbKgDj/r-base-4.6.0=/usr/src/r-base-4.6.0-2.2404.0 -Wdate-time -D_FORTIFY_SOURCE=3
+CXX11='config' variable 'CXX11' is defunct
+CXX11FLAGS='config' variable 'CXX11FLAGS' is defunct
+LDFLAGS=-Wl,-Bsymbolic-functions -flto=auto -ffat-lto-objects -Wl,-z,relro
+Rust_toolchain:
+rustc 1.96.1 (31fca3adb 2026-06-26)
+binary: rustc
+commit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd
+commit-date: 2026-06-26
+host: x86_64-unknown-linux-gnu
+release: 1.96.1
+LLVM version: 22.1.2
+cargo 1.96.1 (356927216 2026-06-26)
+Rzarrs_Cargo_release_profile:
+46:[profile.release]
+47-panic = "abort"
+48-lto = true
+49-codegen-units = 1
+installed_reader_artifacts:
+package=Rzarrs
+version=0.1.0
+artifact=/usr/local/lib/R/site-library/Rzarrs/libs/Rzarrs.so
+2c617e61ba3088d0a2878239ce8e879c7b088cd58edf72d8f4791eaef26e11c3  /usr/local/lib/R/site-library/Rzarrs/libs/Rzarrs.so
+
+String dump of section '.comment':
+  [     0]  GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+  [    2d]  rustc version 1.91.1 (ed61e7d7e 2025-11-07)
+
+
+package=Rarr
+version=2.1.35
+artifact=/usr/local/lib/R/site-library/Rarr/libs/Rarr.so
+3ecb66836520282d9f33e0538f21865d4bcb9d18764778fcdfe6fc6d3858dfee  /usr/local/lib/R/site-library/Rarr/libs/Rarr.so
+
+String dump of section '.comment':
+  [     0]  GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+
+
 lscpu:
 Architecture:                         x86_64
 CPU op-mode(s):                       32-bit, 64-bit
@@ -671,166 +983,7 @@ numactl_hardware:
 available: 1 nodes (0)
 node 0 cpus: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19
 node 0 size: 64081 MB
-node 0 free: 58375 MB
-node distances:
-node   0
-  0:  10
-r_packages:
-Rzarrs=0.1.0
-Rarr=2.1.35
-bench=1.1.4
-```
-
-### zarrista environment
-
-``` text
-command: tools/run_zarrista_bench.sh /tmp/rzarrs-rarr-results/cold/zarrista/environment.txt --fixtures /tmp/rzarrs-rarr-fixtures --out /tmp/rzarrs-rarr-results --python /tmp/zarrista-venv/bin/python --zarrista-revision 92d26b65b90e9715d5c658c71b9216449f25ae64 --cpuset 0 --numa-node 0 --mode cold --reps 5
-source_revision: ab0b24cc8b206e008a9a1d8d1ecf207cd03e15d8
-source_status:
-date_utc: 2026-08-17T19:43:09+00:00
-uname: Linux Ubuntu-2404-noble-amd64-base 6.8.0-78-generic #78-Ubuntu SMP PREEMPT_DYNAMIC Tue Aug 12 11:34:18 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
-cpuset: 0
-numa_node: 0
-mode: cold
-reps: 5
-warm_iterations: 5
-zarrista_revision: 92d26b65b90e9715d5c658c71b9216449f25ae64
-python: Python 3.13.12
-zarrista:
-0.1.0
-/tmp/zarrista-venv/lib/python3.13/site-packages/zarrista/__init__.py
-thread_environment:
-BLOSC_NTHREADS=1
-OMP_NUM_THREADS=1
-OPENBLAS_NUM_THREADS=1
-MKL_NUM_THREADS=1
-VECLIB_MAXIMUM_THREADS=1
-RAYON_NUM_THREADS=1
-TOKIO_WORKER_THREADS=1
-lscpu:
-Architecture:                         x86_64
-CPU op-mode(s):                       32-bit, 64-bit
-Address sizes:                        46 bits physical, 48 bits virtual
-Byte Order:                           Little Endian
-CPU(s):                               20
-On-line CPU(s) list:                  0-19
-Vendor ID:                            GenuineIntel
-BIOS Vendor ID:                       Intel(R) Corporation
-Model name:                           13th Gen Intel(R) Core(TM) i5-13500
-BIOS Model name:                      13th Gen Intel(R) Core(TM) i5-13500 To Be Filled By O.E.M. CPU @ 2.4GHz
-BIOS CPU family:                      205
-CPU family:                           6
-Model:                                191
-Thread(s) per core:                   2
-Core(s) per socket:                   14
-Socket(s):                            1
-Stepping:                             2
-CPU(s) scaling MHz:                   29%
-CPU max MHz:                          4800.0000
-CPU min MHz:                          800.0000
-BogoMIPS:                             4992.00
-Flags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq tme rdpid movdiri movdir64b fsrm md_clear serialize pconfig arch_lbr ibt flush_l1d arch_capabilities
-Virtualization:                       VT-x
-L1d cache:                            544 KiB (14 instances)
-L1i cache:                            704 KiB (14 instances)
-L2 cache:                             11.5 MiB (8 instances)
-L3 cache:                             24 MiB (1 instance)
-NUMA node(s):                         1
-NUMA node0 CPU(s):                    0-19
-Vulnerability Gather data sampling:   Not affected
-Vulnerability Itlb multihit:          Not affected
-Vulnerability L1tf:                   Not affected
-Vulnerability Mds:                    Not affected
-Vulnerability Meltdown:               Not affected
-Vulnerability Mmio stale data:        Not affected
-Vulnerability Reg file data sampling: Mitigation; Clear Register File
-Vulnerability Retbleed:               Not affected
-Vulnerability Spec rstack overflow:   Not affected
-Vulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl
-Vulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization
-Vulnerability Spectre v2:             Mitigation; Enhanced / Automatic IBRS; IBPB conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI BHI_DIS_S
-Vulnerability Srbds:                  Not affected
-Vulnerability Tsx async abort:        Not affected
-numactl_hardware:
-available: 1 nodes (0)
-node 0 cpus: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19
-node 0 size: 64081 MB
-node 0 free: 58610 MB
-node distances:
-node   0
-  0:  10
-```
-
-### warm environment
-
-``` text
-command: tools/run_rzarrs_rarr_bench.sh /tmp/rzarrs-rarr-results/warm/environment.txt --fixtures /tmp/rzarrs-rarr-fixtures --out /tmp/rzarrs-rarr-results --cpuset 0 --numa-node 0 --mode warm --reps 5 --iterations 5
-source_revision: ab0b24cc8b206e008a9a1d8d1ecf207cd03e15d8
-source_status:
-date_utc: 2026-08-17T19:41:00+00:00
-uname: Linux Ubuntu-2404-noble-amd64-base 6.8.0-78-generic #78-Ubuntu SMP PREEMPT_DYNAMIC Tue Aug 12 11:34:18 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
-cpuset: 0
-numa_node: 0
-mode: warm
-reps: 5
-warm_iterations: 5
-thread_environment:
-BLOSC_NTHREADS=1
-OMP_NUM_THREADS=1
-OPENBLAS_NUM_THREADS=1
-MKL_NUM_THREADS=1
-VECLIB_MAXIMUM_THREADS=1
-RAYON_NUM_THREADS=1
-TOKIO_WORKER_THREADS=1
-lscpu:
-Architecture:                         x86_64
-CPU op-mode(s):                       32-bit, 64-bit
-Address sizes:                        46 bits physical, 48 bits virtual
-Byte Order:                           Little Endian
-CPU(s):                               20
-On-line CPU(s) list:                  0-19
-Vendor ID:                            GenuineIntel
-BIOS Vendor ID:                       Intel(R) Corporation
-Model name:                           13th Gen Intel(R) Core(TM) i5-13500
-BIOS Model name:                      13th Gen Intel(R) Core(TM) i5-13500 To Be Filled By O.E.M. CPU @ 2.4GHz
-BIOS CPU family:                      205
-CPU family:                           6
-Model:                                191
-Thread(s) per core:                   2
-Core(s) per socket:                   14
-Socket(s):                            1
-Stepping:                             2
-CPU(s) scaling MHz:                   32%
-CPU max MHz:                          4800.0000
-CPU min MHz:                          800.0000
-BogoMIPS:                             4992.00
-Flags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq tme rdpid movdiri movdir64b fsrm md_clear serialize pconfig arch_lbr ibt flush_l1d arch_capabilities
-Virtualization:                       VT-x
-L1d cache:                            544 KiB (14 instances)
-L1i cache:                            704 KiB (14 instances)
-L2 cache:                             11.5 MiB (8 instances)
-L3 cache:                             24 MiB (1 instance)
-NUMA node(s):                         1
-NUMA node0 CPU(s):                    0-19
-Vulnerability Gather data sampling:   Not affected
-Vulnerability Itlb multihit:          Not affected
-Vulnerability L1tf:                   Not affected
-Vulnerability Mds:                    Not affected
-Vulnerability Meltdown:               Not affected
-Vulnerability Mmio stale data:        Not affected
-Vulnerability Reg file data sampling: Mitigation; Clear Register File
-Vulnerability Retbleed:               Not affected
-Vulnerability Spec rstack overflow:   Not affected
-Vulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl
-Vulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization
-Vulnerability Spectre v2:             Mitigation; Enhanced / Automatic IBRS; IBPB conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI BHI_DIS_S
-Vulnerability Srbds:                  Not affected
-Vulnerability Tsx async abort:        Not affected
-numactl_hardware:
-available: 1 nodes (0)
-node 0 cpus: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19
-node 0 size: 64081 MB
-node 0 free: 58742 MB
+node 0 free: 56683 MB
 node distances:
 node   0
   0:  10
@@ -844,9 +997,9 @@ bench=1.1.4
 
 ``` text
 command: tools/run_zarrista_bench.sh /tmp/rzarrs-rarr-results/warm/zarrista/environment.txt --fixtures /tmp/rzarrs-rarr-fixtures --out /tmp/rzarrs-rarr-results --python /tmp/zarrista-venv/bin/python --zarrista-revision 92d26b65b90e9715d5c658c71b9216449f25ae64 --cpuset 0 --numa-node 0 --mode warm --reps 5 --iterations 5
-source_revision: ab0b24cc8b206e008a9a1d8d1ecf207cd03e15d8
+source_revision: 713b65f3bbadb0fbab249f841d0130e5b3f36a9a
 source_status:
-date_utc: 2026-08-17T19:43:02+00:00
+date_utc: 2026-08-17T20:38:13+00:00
 uname: Linux Ubuntu-2404-noble-amd64-base 6.8.0-78-generic #78-Ubuntu SMP PREEMPT_DYNAMIC Tue Aug 12 11:34:18 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
 cpuset: 0
 numa_node: 0
@@ -866,6 +1019,39 @@ MKL_NUM_THREADS=1
 VECLIB_MAXIMUM_THREADS=1
 RAYON_NUM_THREADS=1
 TOKIO_WORKER_THREADS=1
+current_build_environment_not_retrospective_flags:
+CARGO_ENCODED_RUSTFLAGS=<unset>
+CARGO_PROFILE_RELEASE_LTO=<unset>
+CARGO_PROFILE_RELEASE_CODEGEN_UNITS=<unset>
+RUSTFLAGS=<unset>
+CC=<unset>
+CXX=<unset>
+CFLAGS=<unset>
+CXXFLAGS=<unset>
+CPPFLAGS=<unset>
+LDFLAGS=<unset>
+MAKEFLAGS=<unset>
+Rust_toolchain:
+rustc 1.96.1 (31fca3adb 2026-06-26)
+binary: rustc
+commit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd
+commit-date: 2026-06-26
+host: x86_64-unknown-linux-gnu
+release: 1.96.1
+LLVM version: 22.1.2
+cargo 1.96.1 (356927216 2026-06-26)
+Python_and_Zarrista_artifacts:
+python_executable=/tmp/zarrista-venv/bin/python
+zarrista_distribution=0.1.0
+artifact=/tmp/zarrista-venv/lib/python3.13/site-packages/zarrista/_zarrista.cpython-313-x86_64-linux-gnu.so
+sha256=4fe67fd37abe3fe8859aece5ef42b8bccd34c142aa5a81f2dc4a4efbfcfec5e0
+
+String dump of section '.comment':
+  [     0]  Linker: LLD 22.1.2 (/checkout/src/llvm-project/llvm 1cb4e3833c1919c2e6fb579a23ac0e2b22587b7e)
+  [    5f]  GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+  [    8c]  rustc version 1.96.1 (31fca3adb 2026-06-26)
+
+
 lscpu:
 Architecture:                         x86_64
 CPU op-mode(s):                       32-bit, 64-bit
@@ -914,7 +1100,7 @@ numactl_hardware:
 available: 1 nodes (0)
 node 0 cpus: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19
 node 0 size: 64081 MB
-node 0 free: 58469 MB
+node 0 free: 58240 MB
 node distances:
 node   0
   0:  10
@@ -958,14 +1144,14 @@ if (nrow(r_runs)) {
 
 | mode | fixture                   | codec         | implementation | median_s | throughput_mib_s | max_rss_mib | cpu_percent | mem_alloc_mib |
 |:-----|:--------------------------|:--------------|:---------------|---------:|-----------------:|------------:|------------:|--------------:|
-| cold | numeric-uncompressed.zarr | bytes         | Rarr           |  0.18096 |          353.660 |      369.16 |          85 |       321.570 |
-| warm | numeric-uncompressed.zarr | bytes         | Rarr           |  0.14377 |          445.160 |      397.89 |          99 |       320.650 |
-| cold | numeric-gzip.zarr         | gzip(level=1) | Rarr           |  0.31766 |          201.480 |      394.32 |          89 |       407.730 |
-| warm | numeric-gzip.zarr         | gzip(level=1) | Rarr           |  0.29061 |          220.220 |      434.45 |          99 |       406.800 |
-| cold | numeric-uncompressed.zarr | bytes         | Rzarrs         |  0.73388 |           87.208 |      314.09 |          90 |        64.087 |
-| warm | numeric-uncompressed.zarr | bytes         | Rzarrs         |  0.72301 |           88.519 |      442.37 |          99 |        64.034 |
-| cold | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         |  0.85747 |           74.638 |      314.98 |          93 |        64.087 |
-| warm | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         |  0.83707 |           76.457 |      443.43 |          99 |        64.034 |
+| cold | numeric-uncompressed.zarr | bytes         | Rarr           |  0.18093 |          353.730 |      369.32 |          85 |       321.570 |
+| warm | numeric-uncompressed.zarr | bytes         | Rarr           |  0.14570 |          439.250 |      398.05 |          99 |       320.650 |
+| cold | numeric-gzip.zarr         | gzip(level=1) | Rarr           |  0.31604 |          202.510 |      394.48 |          89 |       407.730 |
+| warm | numeric-gzip.zarr         | gzip(level=1) | Rarr           |  0.29027 |          220.490 |      434.60 |          99 |       406.800 |
+| cold | numeric-uncompressed.zarr | bytes         | Rzarrs         |  0.74129 |           86.336 |      313.93 |          91 |        64.087 |
+| warm | numeric-uncompressed.zarr | bytes         | Rzarrs         |  0.71661 |           89.310 |      442.68 |          99 |        64.034 |
+| cold | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         |  0.85824 |           74.571 |      314.99 |          93 |        64.087 |
+| warm | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         |  0.83636 |           76.522 |      443.59 |          99 |        64.034 |
 
 A speedup is only meaningful within one `mode`, fixture, codec, CPU
 binding, and environment. For each matched pair below, a value above 1
@@ -997,10 +1183,10 @@ if (nrow(r_runs)) {
 
 | mode | fixture                   | codec         | median_s.Rarr | median_s.Rzarrs | rzarrs_speedup_over_rarr |
 |:-----|:--------------------------|:--------------|--------------:|----------------:|-------------------------:|
-| cold | numeric-uncompressed.zarr | bytes         |     0.1809633 |       0.7338764 |                  0.24659 |
-| warm | numeric-uncompressed.zarr | bytes         |     0.1437671 |       0.7230123 |                  0.19884 |
-| cold | numeric-gzip.zarr         | gzip(level=1) |     0.3176552 |       0.8574676 |                  0.37046 |
-| warm | numeric-gzip.zarr         | gzip(level=1) |     0.2906126 |       0.8370733 |                  0.34718 |
+| cold | numeric-uncompressed.zarr | bytes         |     0.1809279 |       0.7412903 |                  0.24407 |
+| warm | numeric-uncompressed.zarr | bytes         |     0.1457035 |       0.7166052 |                  0.20332 |
+| cold | numeric-gzip.zarr         | gzip(level=1) |     0.3160399 |       0.8582374 |                  0.36824 |
+| warm | numeric-gzip.zarr         | gzip(level=1) |     0.2902681 |       0.8363594 |                  0.34706 |
 
 ## Zarrista context baseline
 
@@ -1033,10 +1219,100 @@ if (nrow(zarrista_runs)) {
 
 | mode | fixture                   | codec         | median_s | throughput_mib_s | max_rss_mib | cpu_percent |
 |:-----|:--------------------------|:--------------|---------:|-----------------:|------------:|------------:|
-| cold | numeric-uncompressed.zarr | bytes         | 0.178960 |           357.62 |      105.90 |          54 |
-| warm | numeric-uncompressed.zarr | bytes         | 0.024763 |          2584.50 |      106.05 |          99 |
-| cold | numeric-gzip.zarr         | gzip(level=1) | 0.254560 |           251.42 |      106.53 |          76 |
-| warm | numeric-gzip.zarr         | gzip(level=1) | 0.163500 |           391.45 |      106.93 |          99 |
+| cold | numeric-uncompressed.zarr | bytes         | 0.189620 |           337.51 |      105.89 |          52 |
+| warm | numeric-uncompressed.zarr | bytes         | 0.024876 |          2572.70 |      106.53 |          99 |
+| cold | numeric-gzip.zarr         | gzip(level=1) | 0.261670 |           244.58 |      106.69 |          74 |
+| warm | numeric-gzip.zarr         | gzip(level=1) | 0.163650 |           391.09 |      107.26 |          99 |
+
+## Visual comparisons
+
+These plots include all three readers. Zarrista remains a Python/NumPy
+context point; visual proximity is not an R-binding claim. The timed
+operation is the loaded-runtime, open-and-materialize request recorded
+in `measurement_scope`.
+
+``` r
+if (nrow(r_runs) && nrow(zarrista_runs)) {
+  plot_runs <- rbind(
+    r_runs[c("implementation", "mode", "codec", "median_s", "throughput_mib_s", "max_rss_mib")],
+    zarrista_runs[c("implementation", "mode", "codec", "median_s", "throughput_mib_s", "max_rss_mib")]
+  )
+  plot_runs$workload <- paste(plot_runs$mode, plot_runs$codec, sep = " / ")
+  summary_runs <- stats::aggregate(
+    plot_runs[c("median_s", "throughput_mib_s", "max_rss_mib")],
+    by = list(implementation = plot_runs$implementation, workload = plot_runs$workload),
+    FUN = stats::median,
+    na.rm = TRUE
+  )
+  implementations <- c("Rarr", "Rzarrs", "Zarrista")
+  workloads <- c("cold / bytes", "warm / bytes", "cold / gzip(level=1)", "warm / gzip(level=1)")
+  colours <- c(Rarr = "#0072B2", Rzarrs = "#D55E00", Zarrista = "#009E73")
+
+  draw_metric <- function(metric, label) {
+    old <- par(mfrow = c(2, 2), mar = c(4, 8, 3, 2))
+    on.exit(par(old), add = TRUE)
+    for (workload in workloads) {
+      values <- summary_runs[summary_runs$workload == workload, c("implementation", metric)]
+      values <- values[match(implementations, values$implementation), ]
+      values <- values[!is.na(values[[metric]]), ]
+      x <- values[[metric]]
+      pad <- c(min(x) / 1.8, max(x) * 1.8)
+      plot(x, seq_along(x), log = "x", xlim = pad, yaxt = "n", pch = 19,
+           col = colours[values$implementation], xlab = label, ylab = "", main = workload)
+      axis(2, at = seq_along(x), labels = values$implementation, las = 1)
+      text(x, seq_along(x), labels = format(signif(x, 4), trim = TRUE), pos = 4, cex = 0.8)
+      grid(col = "grey90")
+    }
+  }
+
+  draw_metric("median_s", "Median seconds (lower is better; log scale)")
+  draw_metric("throughput_mib_s", "MiB/s (higher is better; log scale)")
+  draw_metric("max_rss_mib", "Maximum RSS MiB (process diagnostic; log scale)")
+} else {
+  cat("Rarr, Rzarrs, and Zarrista artifacts are all required for plots.\n")
+}
+```
+
+![](benchmark_rzarrs_rarr_files/figure-gfm/reader-plots-1.png)<!-- -->![](benchmark_rzarrs_rarr_files/figure-gfm/reader-plots-2.png)<!-- -->![](benchmark_rzarrs_rarr_files/figure-gfm/reader-plots-3.png)<!-- -->
+
+## Network-bounded S3 matrix
+
+The local-store table above is not a network result. The remote version
+is a separate S3-compatible workload: stage the immutable fixture once
+into a local MinIO bucket, run each client in a dedicated network
+namespace, and apply the same `tc netem` rate and latency in both
+directions on its veth pair. Record MinIO revision, bucket/prefix,
+object count/bytes, endpoint, latency, rate, page-cache mode, and client
+thread limits. Do not use an unbounded public endpoint or fold local and
+remote results together.
+
+It is gated on a successful equivalent full-array remote probe for all
+three clients: Rarr through its explicit `s3_client`, Rzarrs through
+`ZarrObjectStore`, and Zarrista through an Obstore S3 store. Until that
+probe is executable and equality-checked, the report must say that an
+all-three network comparison is unavailable rather than presenting a
+two-reader result as equivalent.
+
+## Compilation provenance and controlled rebuild gate
+
+The environment blocks record toolchains, binary hashes, and
+build-affecting environment variables. They identify what ran, but
+compiler identity alone does **not** prove flag parity—especially for an
+already-installed Rarr binary. Do not attribute the observed gap to
+library design until the controlled rebuild campaign below reproduces
+it.
+
+1.  Build Rarr and Rzarrs from source in a clean R environment with no
+    user or site Makevars overrides; save every compile and link
+    command.
+2.  Pin and record the Rust toolchain, Cargo release profile, C/C++
+    compiler, C/C++ flags, linker flags, enabled features, and binary
+    SHA-256 hashes.
+3.  Re-run this exact fixture, CPU/NUMA/thread/cache matrix on those
+    artifacts.
+4.  Report both the installed-artifact and controlled-rebuild tables;
+    only a stable gap across them rules out unknown compilation flags as
+    the cause.
 
 ## Interpretation limits
 

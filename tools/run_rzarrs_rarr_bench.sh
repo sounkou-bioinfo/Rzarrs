@@ -106,6 +106,35 @@ record_environment() {
     echo "warm_iterations: $iterations"
     echo "thread_environment:"
     printf '%s\n' "${thread_env[@]}"
+    echo "current_build_environment_not_retrospective_flags:"
+    for name in CARGO_ENCODED_RUSTFLAGS CARGO_PROFILE_RELEASE_LTO CARGO_PROFILE_RELEASE_CODEGEN_UNITS RUSTFLAGS CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS MAKEFLAGS; do
+      printf '%s=%s\n' "$name" "${!name-<unset>}"
+    done
+    echo "current_R_build_configuration:"
+    for name in CC CFLAGS CPPFLAGS CXX CXXFLAGS CXX11 CXX11FLAGS LDFLAGS; do
+      printf '%s=' "$name"
+      R CMD config "$name" 2>&1 || true
+    done
+    echo "Rust_toolchain:"
+    rustc -Vv 2>&1 || true
+    cargo -V 2>&1 || true
+    echo "Rzarrs_Cargo_release_profile:"
+    grep -n -A 8 '^\[profile\.release\]' "$root/src/rust/Cargo.toml" || true
+    echo "installed_reader_artifacts:"
+    Rscript - <<'RS'
+for (package in c("Rzarrs", "Rarr")) {
+  root <- find.package(package)
+  artifacts <- list.files(file.path(root, "libs"), recursive = TRUE, full.names = TRUE,
+                          pattern = "\\.(so|dylib|dll)$")
+  cat("package=", package, "\nversion=", as.character(packageVersion(package)), "\n", sep = "")
+  for (artifact in artifacts) {
+    cat("artifact=", artifact, "\n", sep = "")
+    if (nzchar(Sys.which("sha256sum"))) cat(system2("sha256sum", artifact, stdout = TRUE), sep = "\n")
+    if (nzchar(Sys.which("readelf"))) cat(system2("readelf", c("-p", ".comment", artifact), stdout = TRUE, stderr = TRUE), sep = "\n")
+    cat("\n")
+  }
+}
+RS
     echo "lscpu:"
     lscpu
     echo "numactl_hardware:"

@@ -113,6 +113,33 @@ record_environment() {
     "$python" -c 'import zarrista; print(getattr(zarrista, "__version__", "unknown")); print(zarrista.__file__)'
     echo "thread_environment:"
     printf '%s\n' "${thread_env[@]}"
+    echo "current_build_environment_not_retrospective_flags:"
+    for name in CARGO_ENCODED_RUSTFLAGS CARGO_PROFILE_RELEASE_LTO CARGO_PROFILE_RELEASE_CODEGEN_UNITS RUSTFLAGS CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS MAKEFLAGS; do
+      printf '%s=%s\n' "$name" "${!name-<unset>}"
+    done
+    echo "Rust_toolchain:"
+    rustc -Vv 2>&1 || true
+    cargo -V 2>&1 || true
+    echo "Python_and_Zarrista_artifacts:"
+    "$python" - <<'PY'
+import hashlib
+import importlib.metadata
+from pathlib import Path
+import subprocess
+import sys
+import zarrista
+
+print(f"python_executable={sys.executable}")
+print(f"zarrista_distribution={importlib.metadata.version('zarrista')}")
+root = Path(zarrista.__file__).resolve().parent
+for artifact in sorted(root.rglob("*.so")):
+    print(f"artifact={artifact}")
+    print(f"sha256={hashlib.sha256(artifact.read_bytes()).hexdigest()}")
+    try:
+        print(subprocess.check_output(["readelf", "-p", ".comment", str(artifact)], text=True, stderr=subprocess.STDOUT))
+    except (OSError, subprocess.CalledProcessError) as error:
+        print(f"readelf_error={error}")
+PY
     echo "lscpu:"
     lscpu
     echo "numactl_hardware:"
