@@ -1,0 +1,220 @@
+---
+title: "Rzarrs versus Rarr: numeric Zarr read benchmark"
+output:
+  github_document:
+    toc: true
+params:
+  results_dir: !r Sys.getenv("RZARRS_BENCH_RESULTS", unset = "")
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+results_dir <- params$results_dir
+has_results <- nzchar(results_dir) && dir.exists(results_dir)
+```
+
+## Scope
+
+This report is the decision baseline before extending Rzarrs with deferred
+materialization, ALTREP, or an asynchronous native API. It compares the common,
+validated surface only: a complete local Zarr V3 `int32` array read into R.
+
+The fixture generator makes two equivalent workloads:
+
+- `numeric-uncompressed.zarr` uses only the bytes codec;
+- `numeric-gzip.zarr` adds gzip level 1 after bytes.
+
+The runner verifies bitwise-equivalent dimensions and values from Rzarrs and
+Rarr before measuring either implementation. Zarr-VCF, ZIP stores, strings,
+partial reads, transpose, and remote object stores are outside this baseline.
+They require their own interoperable fixture and equality contract.
+
+## Method
+
+The driver uses `bench::mark()` for per-process elapsed-time and allocation
+measurements. Each implementation runs in a separate, fresh R process. The
+shell runner binds that process to one physical CPU and its NUMA memory node
+with `taskset` and `numactl`, records GNU `time -v`, and alternates tool order
+by replicate.
+
+The baseline is deliberately single-threaded. Neither implementation has a
+matched documented read-thread knob, so a multi-core taskset would not
+establish equivalent thread budgets. The runner additionally pins
+`BLOSC_NTHREADS`, `RAYON_NUM_THREADS`, `TOKIO_WORKER_THREADS`, and OpenMP/BLAS
+thread variables to one; their exact values are recorded in `environment.txt`.
+Warm and cold cache data are distinct workloads and must never be pooled.
+
+```sh
+Rscript tools/make_benchmark_fixtures.R \
+  --out "$HOME/.cache/Rzarrs/benchmarks/fixtures"
+
+tools/run_rzarrs_rarr_bench.sh \
+  --fixtures "$HOME/.cache/Rzarrs/benchmarks/fixtures" \
+  --out "$HOME/.cache/Rzarrs/benchmarks/results" \
+  --cpuset 2 --numa-node 0 --mode warm --reps 5 --iterations 5
+
+sudo tools/run_rzarrs_rarr_bench.sh \
+  --fixtures "$HOME/.cache/Rzarrs/benchmarks/fixtures" \
+  --out "$HOME/.cache/Rzarrs/benchmarks/results" \
+  --cpuset 2 --numa-node 0 --mode cold --reps 5
+
+RZARRS_BENCH_RESULTS="$HOME/.cache/Rzarrs/benchmarks/results" \
+  Rscript -e 'rmarkdown::render("benchmarks/benchmark_rzarrs_rarr.Rmd")'
+```
+
+## Recorded environment
+
+Every run directory contains `bench.rds`, `summary.csv`, GNU `time -v` output,
+the exact command line, R session information, and its fixture manifest. Each
+cache-mode directory has `environment.txt`, including source revision/status,
+CPU and NUMA topology, package versions, and run configuration. The report
+below only aggregates artifacts that share this result directory.
+
+```{r read-results}
+read_time_v <- function(path) {
+  if (!file.exists(path)) return(c(max_rss_mib = NA_real_, cpu_percent = NA_real_))
+  lines <- readLines(path, warn = FALSE)
+  rss_line <- grep("Maximum resident set size", lines, value = TRUE)
+  cpu_line <- grep("Percent of CPU this job got", lines, value = TRUE)
+  rss_kib <- if (length(rss_line)) {
+    as.numeric(sub(".*: *", "", rss_line[[1L]]))
+  } else {
+    NA_real_
+  }
+  cpu_percent <- if (length(cpu_line)) {
+    as.numeric(sub("%.*", "", sub(".*: *", "", cpu_line[[1L]])))
+  } else {
+    NA_real_
+  }
+  c(max_rss_mib = rss_kib / 1024, cpu_percent = cpu_percent)
+}
+
+read_manifest <- function(path) {
+  manifest <- file.path(dirname(path), "fixture.dcf")
+  if (!file.exists(manifest)) return(c(logical_bytes = NA_real_, codec = NA_character_))
+  lines <- trimws(readLines(manifest, warn = FALSE))
+  pairs <- regmatches(lines, regexec("^([^:=]+)[:=] *(.*)$", lines))
+  if (any(lengths(pairs) != 3L)) stop("malformed fixture manifest: ", manifest)
+  fields <- stats::setNames(
+    vapply(pairs, `[[`, character(1L), 3L),
+    vapply(pairs, `[[`, character(1L), 2L)
+  )
+  c(
+    logical_bytes = as.numeric(fields[["logical_bytes"]]),
+    codec = unname(fields[["codec"]])
+  )
+}
+
+read_run <- function(path) {
+  result <- utils::read.csv(path, stringsAsFactors = FALSE)
+  result$run_dir <- dirname(path)
+  result$fixture <- basename(result$store)
+  manifest <- read_manifest(path)
+  result$logical_bytes <- as.numeric(manifest[["logical_bytes"]])
+  result$codec <- manifest[["codec"]]
+  resources <- read_time_v(file.path(result$run_dir, "time-v.txt"))
+  result$max_rss_mib <- resources[["max_rss_mib"]]
+  result$cpu_percent <- resources[["cpu_percent"]]
+  result
+}
+
+if (has_results) {
+  summary_paths <- list.files(
+    results_dir, pattern = "summary\\.csv$", recursive = TRUE, full.names = TRUE
+  )
+  if (!length(summary_paths)) stop("no summary.csv files under: ", results_dir)
+  runs <- do.call(rbind, lapply(summary_paths, read_run))
+  runs$throughput_mib_s <- runs$logical_bytes / runs$median_s / 1024^2
+  runs
+} else {
+  data.frame()
+}
+```
+
+```{r environment, results='asis'}
+if (has_results) {
+  environment_paths <- list.files(
+    results_dir, pattern = "^environment\\.txt$", recursive = TRUE, full.names = TRUE
+  )
+  if (!length(environment_paths)) stop("no environment.txt files under: ", results_dir)
+  for (environment_path in environment_paths) {
+    cat("### ", basename(dirname(environment_path)), " environment\n\n", sep = "")
+    cat("```text\n")
+    cat(readLines(environment_path, warn = FALSE), sep = "\n")
+    cat("\n```\n\n")
+  }
+} else {
+  cat("Render with `RZARRS_BENCH_RESULTS` set to a runner output directory.\n")
+}
+```
+
+## Results
+
+`bench` repeats inside a process. The table therefore reports the median of
+each process's `bench` median across process-level replicates. `max_rss_mib`
+and `cpu_percent` are likewise process-level medians from GNU `time -v`.
+
+```{r results-table}
+if (nrow(runs)) {
+  reported <- stats::aggregate(
+    runs[c("median_s", "mem_alloc_bytes", "throughput_mib_s", "max_rss_mib", "cpu_percent")],
+    by = list(
+      mode = runs$mode,
+      fixture = runs$fixture,
+      codec = runs$codec,
+      implementation = runs$implementation
+    ),
+    FUN = stats::median,
+    na.rm = TRUE
+  )
+  names(reported)[names(reported) == "Group.1"] <- "mode"
+  names(reported)[names(reported) == "Group.2"] <- "fixture"
+  names(reported)[names(reported) == "Group.3"] <- "codec"
+  names(reported)[names(reported) == "Group.4"] <- "implementation"
+  reported$median_s <- signif(reported$median_s, 5)
+  reported$mem_alloc_mib <- signif(reported$mem_alloc_bytes / 1024^2, 5)
+  reported$throughput_mib_s <- signif(reported$throughput_mib_s, 5)
+  reported$max_rss_mib <- signif(reported$max_rss_mib, 5)
+  reported$cpu_percent <- signif(reported$cpu_percent, 5)
+  reported$mem_alloc_bytes <- NULL
+  knitr::kable(reported, row.names = FALSE)
+} else {
+  cat("No benchmark artifacts supplied.\n")
+}
+```
+
+A speedup is only meaningful within one `mode`, fixture, codec, CPU binding,
+and environment. For each matched pair below, a value above 1 means Rzarrs had
+the lower process-level `bench` median.
+
+```{r speedup}
+if (nrow(runs)) {
+  per_run <- stats::aggregate(
+    runs["median_s"],
+    by = list(mode = runs$mode, fixture = runs$fixture, codec = runs$codec,
+              implementation = runs$implementation),
+    FUN = stats::median
+  )
+  wide <- reshape(
+    per_run,
+    idvar = c("mode", "fixture", "codec"),
+    timevar = "implementation",
+    direction = "wide"
+  )
+  if (all(c("median_s.Rzarrs", "median_s.Rarr") %in% names(wide))) {
+    wide$rzarrs_speedup_over_rarr <- wide$median_s.Rarr / wide$median_s.Rzarrs
+    wide$rzarrs_speedup_over_rarr <- signif(wide$rzarrs_speedup_over_rarr, 5)
+    knitr::kable(wide, row.names = FALSE)
+  } else {
+    cat("Both implementations are required for a speedup calculation.\n")
+  }
+}
+```
+
+## Interpretation limits
+
+This report attributes no cost by itself. The difference between bytes-only and
+gzip fixtures estimates the combined codec contribution for this workload, not
+compression time in isolation. Profiling comes next only if the measured result
+makes an extension worthwhile; it must distinguish I/O, decompression, data
+layout conversion, and R object materialization.

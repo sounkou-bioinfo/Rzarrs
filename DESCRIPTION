@@ -21,7 +21,10 @@ URL: https://github.com/RGenomicsETL/Rzarrs
 BugReports: https://github.com/RGenomicsETL/Rzarrs/issues
 SystemRequirements: Cargo (Rust's package manager), rustc >= 1.82.0, GNU Make
 Suggests: tinytest,
-    Rarr
+    Rarr,
+    bench,
+    optparse,
+    rmarkdown
 Additional_repositories: https://bioconductor.org/packages/3.22/bioc
 Encoding: UTF-8
 RoxygenNote: 7.3.3

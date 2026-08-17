@@ -14,3 +14,4 @@ src/Makevars.win
 *.Rcheck/
 *.tar.gz
 src/rust/vendor/
+.pi/
