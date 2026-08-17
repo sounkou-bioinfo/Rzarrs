@@ -81,3 +81,34 @@ RZARRS_BENCH_RESULTS="$RESULTS" \
 
 Do not compare results across revisions, fixture sizes/codecs, cache modes,
 thread placements, or hardware as though they were the same workload.
+
+## Zarrista context baseline
+
+[Zarrista](https://github.com/developmentseed/zarrista) reads the same local
+Zarr V3 bytes/gzip fixtures, but materializes a Python/NumPy array rather than
+an R array. It is therefore a native-library context point, reported separately
+from the Rzarrs-versus-Rarr table; it is not evidence about an R binding.
+
+Build a pinned upstream revision in an isolated environment, then supply both
+its interpreter and revision to the runner:
+
+```sh
+git clone https://github.com/developmentseed/zarrista.git "$HOME/src/zarrista"
+cd "$HOME/src/zarrista"
+ZARRISTA_REVISION="$(git rev-parse HEAD)"
+git checkout "$ZARRISTA_REVISION"
+python3 -m venv "$HOME/.cache/Rzarrs/zarrista-venv"
+"$HOME/.cache/Rzarrs/zarrista-venv/bin/pip" install . numpy
+
+cd /root/Rzarrs
+tools/run_zarrista_bench.sh \
+  --fixtures "$FIXTURES" --out "$RESULTS" \
+  --python "$HOME/.cache/Rzarrs/zarrista-venv/bin/python" \
+  --zarrista-revision "$ZARRISTA_REVISION" \
+  --cpuset "$CPUSET" --numa-node "$NUMA_NODE" \
+  --mode warm --reps 5 --iterations 5
+```
+
+The Zarrista runner uses the same one-CPU/NUMA placement and native thread
+controls as the R runner, including `RAYON_NUM_THREADS=1`. It verifies output
+shape, dtype, and boundary values before timing each fixture.

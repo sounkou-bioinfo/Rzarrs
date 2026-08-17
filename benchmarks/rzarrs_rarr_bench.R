@@ -119,6 +119,7 @@ out <- normalizePath(args$out, mustWork = FALSE)
 dir.create(out, recursive = TRUE, showWarnings = FALSE)
 summary <- data.frame(
   implementation = args$implementation,
+  runtime = "R",
   mode = args$mode,
   store = args$store,
   iterations_requested = args$iterations,

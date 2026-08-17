@@ -29,6 +29,11 @@ Rarr before measuring either implementation. Zarr-VCF, ZIP stores, strings,
 partial reads, transpose, and remote object stores are outside this baseline.
 They require their own interoperable fixture and equality contract.
 
+Zarrista is included as a separate contextual point using the same fixtures,
+CPU/NUMA placement, and thread limits. It materializes a Python/NumPy array,
+not an R array, so it must never be read as an R-binding comparison or folded
+into the Rzarrs-versus-Rarr speedup.
+
 ## Method
 
 The driver uses `bench::mark()` for per-process elapsed-time and allocation
@@ -42,7 +47,9 @@ matched documented read-thread knob, so a multi-core taskset would not
 establish equivalent thread budgets. The runner additionally pins
 `BLOSC_NTHREADS`, `RAYON_NUM_THREADS`, `TOKIO_WORKER_THREADS`, and OpenMP/BLAS
 thread variables to one; their exact values are recorded in `environment.txt`.
-Warm and cold cache data are distinct workloads and must never be pooled.
+The Zarrista runner also sets `RAYON_NUM_THREADS=1`, and records its exact
+upstream Git revision and Python environment. Warm and cold cache data are
+distinct workloads and must never be pooled.
 
 ```sh
 Rscript tools/make_benchmark_fixtures.R \
@@ -57,6 +64,13 @@ sudo tools/run_rzarrs_rarr_bench.sh \
   --fixtures "$HOME/.cache/Rzarrs/benchmarks/fixtures" \
   --out "$HOME/.cache/Rzarrs/benchmarks/results" \
   --cpuset 2 --numa-node 0 --mode cold --reps 5
+
+# ZARRISTA_PYTHON has zarrista + numpy installed from ZARRISTA_REVISION.
+tools/run_zarrista_bench.sh \
+  --fixtures "$HOME/.cache/Rzarrs/benchmarks/fixtures" \
+  --out "$HOME/.cache/Rzarrs/benchmarks/results" \
+  --python "$ZARRISTA_PYTHON" --zarrista-revision "$ZARRISTA_REVISION" \
+  --cpuset 2 --numa-node 0 --mode warm --reps 5 --iterations 5
 
 RZARRS_BENCH_RESULTS="$HOME/.cache/Rzarrs/benchmarks/results" \
   Rscript -e 'rmarkdown::render("benchmarks/benchmark_rzarrs_rarr.Rmd")'
@@ -107,6 +121,15 @@ read_manifest <- function(path) {
 
 read_run <- function(path) {
   result <- utils::read.csv(path, stringsAsFactors = FALSE)
+  if (!"runtime" %in% names(result)) result$runtime <- "R"
+  common_fields <- c(
+    "implementation", "runtime", "mode", "store", "iterations_requested",
+    "iterations_completed", "min_s", "median_s", "mean_s", "total_s",
+    "mem_alloc_bytes", "gc_count", "r_version", "rzarrs_version",
+    "rarr_version", "bench_version"
+  )
+  for (field in setdiff(common_fields, names(result))) result[[field]] <- NA
+  result <- result[common_fields]
   result$run_dir <- dirname(path)
   result$fixture <- basename(result$store)
   manifest <- read_manifest(path)
@@ -129,6 +152,8 @@ if (has_results) {
 } else {
   data.frame()
 }
+r_runs <- if (nrow(runs)) subset(runs, runtime == "R") else runs
+zarrista_runs <- if (nrow(runs)) subset(runs, implementation == "Zarrista") else runs
 ```
 
 ```{r environment, results='asis'}
@@ -155,14 +180,14 @@ each process's `bench` median across process-level replicates. `max_rss_mib`
 and `cpu_percent` are likewise process-level medians from GNU `time -v`.
 
 ```{r results-table}
-if (nrow(runs)) {
+if (nrow(r_runs)) {
   reported <- stats::aggregate(
-    runs[c("median_s", "mem_alloc_bytes", "throughput_mib_s", "max_rss_mib", "cpu_percent")],
+    r_runs[c("median_s", "mem_alloc_bytes", "throughput_mib_s", "max_rss_mib", "cpu_percent")],
     by = list(
-      mode = runs$mode,
-      fixture = runs$fixture,
-      codec = runs$codec,
-      implementation = runs$implementation
+      mode = r_runs$mode,
+      fixture = r_runs$fixture,
+      codec = r_runs$codec,
+      implementation = r_runs$implementation
     ),
     FUN = stats::median,
     na.rm = TRUE
@@ -188,11 +213,11 @@ and environment. For each matched pair below, a value above 1 means Rzarrs had
 the lower process-level `bench` median.
 
 ```{r speedup}
-if (nrow(runs)) {
+if (nrow(r_runs)) {
   per_run <- stats::aggregate(
-    runs["median_s"],
-    by = list(mode = runs$mode, fixture = runs$fixture, codec = runs$codec,
-              implementation = runs$implementation),
+    r_runs["median_s"],
+    by = list(mode = r_runs$mode, fixture = r_runs$fixture, codec = r_runs$codec,
+              implementation = r_runs$implementation),
     FUN = stats::median
   )
   wide <- reshape(
@@ -208,6 +233,35 @@ if (nrow(runs)) {
   } else {
     cat("Both implementations are required for a speedup calculation.\n")
   }
+}
+```
+
+## Zarrista context baseline
+
+Zarrista runs the same local V3 fixtures with the same CPU/NUMA and native
+thread controls, but its result is a NumPy array. The table intentionally omits
+R allocation measurements and does not calculate an Rzarrs/Rarr-style speedup.
+It is a comparison point for a Rust-native Python reader, not a prospective R
+binding measurement.
+
+```{r zarrista-results}
+if (nrow(zarrista_runs)) {
+  zarrista_report <- stats::aggregate(
+    zarrista_runs[c("median_s", "throughput_mib_s", "max_rss_mib", "cpu_percent")],
+    by = list(
+      mode = zarrista_runs$mode,
+      fixture = zarrista_runs$fixture,
+      codec = zarrista_runs$codec
+    ),
+    FUN = stats::median,
+    na.rm = TRUE
+  )
+  for (field in c("median_s", "throughput_mib_s", "max_rss_mib", "cpu_percent")) {
+    zarrista_report[[field]] <- signif(as.numeric(zarrista_report[[field]]), 5)
+  }
+  knitr::kable(zarrista_report, row.names = FALSE)
+} else {
+  cat("No Zarrista artifacts supplied.\n")
 }
 ```
 
