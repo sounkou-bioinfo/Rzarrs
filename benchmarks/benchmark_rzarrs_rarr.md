@@ -38,17 +38,26 @@ R-binding comparison or folded into the Rzarrs-versus-Rarr speedup.
 
 ## Method
 
-The driver uses `bench::mark()` for per-process elapsed-time and
-allocation measurements. Package loading occurs before `bench::mark()`;
-Zarrista likewise imports its Python API before `time.perf_counter()`
-starts. Thus `median_s` measures a meaningful request—open the
-store/array and fully materialize its payload—not R/Python process or
-library startup. GNU `time -v` deliberately remains process-inclusive,
-but is used only for peak RSS and CPU diagnostics, not the elapsed-time
-denominator. Each implementation runs in a separate, fresh process. The
-shell runner binds that process to one physical CPU and its NUMA memory
-node with `taskset` and `numactl`, records GNU `time -v`, and alternates
-tool order by replicate.
+The driver uses `bench::mark()` for per-process elapsed time and
+R-runtime allocation diagnostics. Package loading occurs before
+`bench::mark()`; Zarrista likewise imports its Python API before
+`time.perf_counter()` starts. Thus `median_s` measures a meaningful
+request—open the store/array and fully materialize its payload—not
+R/Python process or library startup.
+
+`bench::mark()` reports cumulative bytes allocated through R’s memory
+profiler during its separate memory-measurement evaluation. This is not
+peak, live, net, or retained memory, and it excludes Rust/C allocator
+activity. Its GC count is R GC activity only. GNU `time -v` deliberately
+remains process-inclusive: `max_rss_mib` is the whole fresh process’s
+peak RSS, including startup, untimed warmup when present, and all timed
+iterations. RSS and CPU are diagnostics, not the elapsed-time
+denominator.
+
+Each implementation runs in a separate, fresh process. The shell runner
+binds that process to one physical CPU and its NUMA memory node with
+`taskset` and `numactl`, records GNU `time -v`, and alternates tool
+order by replicate.
 
 The baseline is deliberately single-threaded. Neither implementation has
 a matched documented read-thread knob, so a multi-core taskset would not
@@ -57,7 +66,13 @@ establish equivalent thread budgets. The runner additionally pins
 OpenMP/BLAS thread variables to one; their exact values are recorded in
 `environment.txt`. The Zarrista runner also sets `RAYON_NUM_THREADS=1`,
 and records its exact upstream Git revision and Python environment. Warm
-and cold cache data are distinct workloads and must never be pooled.
+and cold cache data are distinct workloads and must never be pooled. In
+warm mode, each loaded process performs one untimed full
+materialization, does not drop the Linux page cache, and then runs five
+timed iterations. In cold mode, the runner executes `sync` and drops the
+Linux page cache before every fresh measured process, performs no
+untimed read, and runs one timed iteration. CPU-cache state is not
+controlled.
 
 ``` sh
 Rscript benchmarks/make_benchmark_fixtures.R \
@@ -256,9 +271,10 @@ knitr::kable(reported, row.names = FALSE)
 | cold | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         | R       | 0.262220 | 0.262220 |           244.07 |      314.32 |          88 |
 | warm | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         | R       | 0.236160 | 0.244490 |           271.00 |      443.54 |          99 |
 
-R allocation and garbage-collection counts are runtime-specific
-diagnostics, so they are reported separately rather than padded into
-Python rows.
+Cumulative R-profiled allocation and R garbage-collection counts are
+runtime-specific diagnostics, so they are reported separately rather
+than padded into Python rows. They do not measure Rust/C heap allocation
+or peak memory.
 
 ``` r
 r_runtime_report <- stats::aggregate(
@@ -271,23 +287,23 @@ r_runtime_report <- stats::aggregate(
   ),
   FUN = stats::median
 )
-r_runtime_report$mem_alloc_mib <- signif(
+r_runtime_report$r_cumulative_alloc_mib <- signif(
   r_runtime_report$mem_alloc_bytes / 1024^2, 5
 )
 r_runtime_report$mem_alloc_bytes <- NULL
 knitr::kable(r_runtime_report, row.names = FALSE)
 ```
 
-| mode | fixture                   | codec         | implementation | gc_count | mem_alloc_mib |
-|:-----|:--------------------------|:--------------|:---------------|---------:|--------------:|
-| cold | numeric-uncompressed.zarr | bytes         | Rarr           |        5 |       321.570 |
-| warm | numeric-uncompressed.zarr | bytes         | Rarr           |       19 |       320.650 |
-| cold | numeric-gzip.zarr         | gzip(level=1) | Rarr           |        5 |       407.730 |
-| warm | numeric-gzip.zarr         | gzip(level=1) | Rarr           |       28 |       406.800 |
-| cold | numeric-uncompressed.zarr | bytes         | Rzarrs         |        1 |        64.087 |
-| warm | numeric-uncompressed.zarr | bytes         | Rzarrs         |        4 |        64.034 |
-| cold | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         |        1 |        64.087 |
-| warm | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         |        4 |        64.034 |
+| mode | fixture                   | codec         | implementation | gc_count | r_cumulative_alloc_mib |
+|:-----|:--------------------------|:--------------|:---------------|---------:|-----------------------:|
+| cold | numeric-uncompressed.zarr | bytes         | Rarr           |        5 |                321.570 |
+| warm | numeric-uncompressed.zarr | bytes         | Rarr           |       19 |                320.650 |
+| cold | numeric-gzip.zarr         | gzip(level=1) | Rarr           |        5 |                407.730 |
+| warm | numeric-gzip.zarr         | gzip(level=1) | Rarr           |       28 |                406.800 |
+| cold | numeric-uncompressed.zarr | bytes         | Rzarrs         |        1 |                 64.087 |
+| warm | numeric-uncompressed.zarr | bytes         | Rzarrs         |        4 |                 64.034 |
+| cold | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         |        1 |                 64.087 |
+| warm | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         |        4 |                 64.034 |
 
 A speedup is only meaningful within one `mode`, fixture, codec, CPU
 binding, and environment. For each matched pair below, a value above 1

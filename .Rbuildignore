@@ -21,6 +21,8 @@
 ^_pkgdown\.yml$
 ^pkgdown$
 ^tools$
+^benchmarks$
+^docs$
 ^site$
 ^examples$
 ^playground$

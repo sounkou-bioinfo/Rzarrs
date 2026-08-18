@@ -55,6 +55,16 @@ for (case_id in seq_len(nrow(cases))) {
       zarr_version = 3L
     )
 
+    # Rarr releases differ on whether logical arrays are written as the
+    # canonical V3 `bool` name or the legacy `bool8` alias. Normalize the
+    # independently generated fixture before either reader opens it.
+    metadata_path <- file.path(path, "zarr.json")
+    metadata <- gsub(
+      '"bool8"', '"bool"', readLines(metadata_path, warn = FALSE), fixed = TRUE
+    )
+    stopifnot(data_type != "logical" || any(grepl('"bool"', metadata, fixed = TRUE)))
+    writeLines(metadata, metadata_path, useBytes = TRUE)
+
     # Rarr 2.1.35 labels zlib-wrapped chunks as gzip. Rewrite those payloads
     # as actual gzip streams so both readers are tested against valid V3 data.
     if (gzip) {

@@ -75,8 +75,9 @@ The runner alternates implementation order by replicate, invokes a new pinned
 R process for each measurement, and records:
 
 - `summary.csv`: the runtime-neutral timing schema shared by R and Python;
-- `bench.rds` and `runtime-metrics.csv`: R-only `bench` samples, allocation,
-  and garbage-collection diagnostics;
+- `bench.rds` and `runtime-metrics.csv`: R-only `bench` samples, cumulative
+  R-profiled allocation, and R garbage-collection diagnostics (not peak RSS or
+  native Rust/C allocation);
 - `time-v.txt`: GNU `time -v`, including maximum RSS and CPU percentage;
 - `command.txt`, `session-info.txt`, `fixture.dcf`, stdout, and stderr for each
   replicate;
