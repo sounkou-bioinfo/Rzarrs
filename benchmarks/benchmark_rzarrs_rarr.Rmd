@@ -10,14 +10,17 @@ params:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 results_dir <- params$results_dir
-has_results <- nzchar(results_dir) && dir.exists(results_dir)
+stopifnot(nzchar(results_dir), dir.exists(results_dir))
+results_dir <- normalizePath(results_dir, mustWork = TRUE)
 ```
 
 ## Scope
 
-This report is the decision baseline before extending Rzarrs with deferred
-materialization, ALTREP, or an asynchronous native API. It compares the common,
-validated surface only: a complete local Zarr V3 `int32` array read into R.
+This report measures Rzarrs after removing the eager materialization path's
+redundant full-array reorder buffer and per-element coordinate allocation. It
+compares the common, validated surface only: a complete local Zarr V3 `int32`
+array read into R. Deferred materialization, ALTREP, and asynchronous APIs remain
+separate decisions.
 
 The fixture generator makes two equivalent workloads:
 
@@ -57,21 +60,21 @@ upstream Git revision and Python environment. Warm and cold cache data are
 distinct workloads and must never be pooled.
 
 ```sh
-Rscript tools/make_benchmark_fixtures.R \
+Rscript benchmarks/make_benchmark_fixtures.R \
   --out "$HOME/.cache/Rzarrs/benchmarks/fixtures"
 
-tools/run_rzarrs_rarr_bench.sh \
+benchmarks/run_rzarrs_rarr_bench.sh \
   --fixtures "$HOME/.cache/Rzarrs/benchmarks/fixtures" \
   --out "$HOME/.cache/Rzarrs/benchmarks/results" \
   --cpuset 2 --numa-node 0 --mode warm --reps 5 --iterations 5
 
-sudo tools/run_rzarrs_rarr_bench.sh \
+sudo benchmarks/run_rzarrs_rarr_bench.sh \
   --fixtures "$HOME/.cache/Rzarrs/benchmarks/fixtures" \
   --out "$HOME/.cache/Rzarrs/benchmarks/results" \
   --cpuset 2 --numa-node 0 --mode cold --reps 5
 
 # ZARRISTA_PYTHON has zarrista + numpy installed from ZARRISTA_REVISION.
-tools/run_zarrista_bench.sh \
+benchmarks/run_zarrista_bench.sh \
   --fixtures "$HOME/.cache/Rzarrs/benchmarks/fixtures" \
   --out "$HOME/.cache/Rzarrs/benchmarks/results" \
   --python "$ZARRISTA_PYTHON" --zarrista-revision "$ZARRISTA_REVISION" \
@@ -91,49 +94,51 @@ below only aggregates artifacts that share this result directory.
 
 ```{r read-results}
 read_time_v <- function(path) {
-  if (!file.exists(path)) return(c(max_rss_mib = NA_real_, cpu_percent = NA_real_))
   lines <- readLines(path, warn = FALSE)
   rss_line <- grep("Maximum resident set size", lines, value = TRUE)
   cpu_line <- grep("Percent of CPU this job got", lines, value = TRUE)
-  rss_kib <- if (length(rss_line)) {
-    as.numeric(sub(".*: *", "", rss_line[[1L]]))
-  } else {
-    NA_real_
-  }
-  cpu_percent <- if (length(cpu_line)) {
-    as.numeric(sub("%.*", "", sub(".*: *", "", cpu_line[[1L]])))
-  } else {
-    NA_real_
-  }
+  stopifnot(length(rss_line) == 1L, length(cpu_line) == 1L)
+  rss_kib <- as.numeric(sub(".*: *", "", rss_line[[1L]]))
+  cpu_percent <- as.numeric(sub("%.*", "", sub(".*: *", "", cpu_line[[1L]])))
+  stopifnot(!is.na(rss_kib), !is.na(cpu_percent))
   c(max_rss_mib = rss_kib / 1024, cpu_percent = cpu_percent)
 }
 
 read_manifest <- function(path) {
   manifest <- file.path(dirname(path), "fixture.dcf")
-  if (!file.exists(manifest)) return(c(logical_bytes = NA_real_, codec = NA_character_))
   lines <- trimws(readLines(manifest, warn = FALSE))
   pairs <- regmatches(lines, regexec("^([^:=]+)[:=] *(.*)$", lines))
-  if (any(lengths(pairs) != 3L)) stop("malformed fixture manifest: ", manifest)
+  stopifnot(all(lengths(pairs) == 3L))
   fields <- stats::setNames(
     vapply(pairs, `[[`, character(1L), 3L),
     vapply(pairs, `[[`, character(1L), 2L)
   )
-  c(
+  values <- c(
     logical_bytes = as.numeric(fields[["logical_bytes"]]),
     codec = unname(fields[["codec"]])
   )
+  stopifnot(!anyNA(values), nzchar(values[["codec"]]))
+  values
 }
 
-read_run <- function(path) {
-  result <- utils::read.csv(path, stringsAsFactors = FALSE)
-  if (!"runtime" %in% names(result)) result$runtime <- "R"
-  common_fields <- c(
-    "implementation", "runtime", "mode", "store", "iterations_requested",
-    "iterations_completed", "min_s", "median_s", "mean_s", "total_s",
-    "mem_alloc_bytes", "gc_count", "r_version", "rzarrs_version",
-    "rarr_version", "bench_version"
-  )
-  for (field in setdiff(common_fields, names(result))) result[[field]] <- NA
+common_fields <- c(
+  "implementation", "runtime", "runtime_version", "implementation_version",
+  "benchmark_engine", "benchmark_engine_version", "measurement_scope",
+  "startup_included", "mode", "store", "iterations_requested",
+  "iterations_completed", "min_s", "median_s", "mean_s", "total_s"
+)
+summary_paths <- list.files(
+  results_dir, pattern = "summary\\.csv$", recursive = TRUE, full.names = TRUE
+)
+stopifnot(length(summary_paths) > 0L)
+raw_runs <- lapply(summary_paths, utils::read.csv, stringsAsFactors = FALSE)
+stopifnot(all(vapply(
+  raw_runs,
+  function(result) nrow(result) == 1L && all(common_fields %in% names(result)),
+  logical(1L)
+)))
+
+read_run <- function(result, path) {
   result <- result[common_fields]
   result$run_dir <- dirname(path)
   result$fixture <- basename(result$store)
@@ -146,36 +151,59 @@ read_run <- function(path) {
   result
 }
 
-if (has_results) {
-  summary_paths <- list.files(
-    results_dir, pattern = "summary\\.csv$", recursive = TRUE, full.names = TRUE
-  )
-  if (!length(summary_paths)) stop("no summary.csv files under: ", results_dir)
-  runs <- do.call(rbind, lapply(summary_paths, read_run))
-  runs$throughput_mib_s <- runs$logical_bytes / runs$median_s / 1024^2
-  runs
-} else {
-  data.frame()
-}
-r_runs <- if (nrow(runs)) subset(runs, runtime == "R") else runs
-zarrista_runs <- if (nrow(runs)) subset(runs, implementation == "Zarrista") else runs
+runs <- do.call(rbind, Map(read_run, raw_runs, summary_paths))
+runs$throughput_mib_s <- runs$logical_bytes / runs$median_s / 1024^2
+stopifnot(
+  !anyNA(runs),
+  setequal(unique(runs$implementation), c("Rarr", "Rzarrs", "Zarrista"))
+)
+
+runtime_metric_paths <- list.files(
+  results_dir, pattern = "^runtime-metrics\\.csv$", recursive = TRUE,
+  full.names = TRUE
+)
+raw_runtime_metrics <- lapply(
+  runtime_metric_paths, utils::read.csv, stringsAsFactors = FALSE
+)
+runtime_metric_fields <- c(
+  "implementation", "runtime", "mem_alloc_bytes", "gc_count"
+)
+stopifnot(
+  length(runtime_metric_paths) == sum(runs$runtime == "R"),
+  all(vapply(
+    raw_runtime_metrics,
+    function(result) {
+      nrow(result) == 1L && all(runtime_metric_fields %in% names(result))
+    },
+    logical(1L)
+  ))
+)
+runtime_metrics <- do.call(rbind, Map(
+  function(result, path) {
+    result <- result[runtime_metric_fields]
+    result$run_dir <- dirname(path)
+    result
+  },
+  raw_runtime_metrics,
+  runtime_metric_paths
+))
+r_runs <- merge(
+  subset(runs, runtime == "R"), runtime_metrics,
+  by = c("run_dir", "implementation", "runtime"), sort = FALSE
+)
+zarrista_runs <- subset(runs, implementation == "Zarrista")
+stopifnot(!anyNA(r_runs), nrow(r_runs) == sum(runs$runtime == "R"))
 ```
 
-```{r environment, results='asis'}
-if (has_results) {
-  environment_paths <- list.files(
-    results_dir, pattern = "^environment\\.txt$", recursive = TRUE, full.names = TRUE
-  )
-  if (!length(environment_paths)) stop("no environment.txt files under: ", results_dir)
-  for (environment_path in environment_paths) {
-    cat("### ", basename(dirname(environment_path)), " environment\n\n", sep = "")
-    cat("```text\n")
-    cat(readLines(environment_path, warn = FALSE), sep = "\n")
-    cat("\n```\n\n")
-  }
-} else {
-  cat("Render with `RZARRS_BENCH_RESULTS` set to a runner output directory.\n")
-}
+```{r environment}
+environment_paths <- list.files(
+  results_dir, pattern = "^environment\\.txt$", recursive = TRUE, full.names = TRUE
+)
+stopifnot(length(environment_paths) > 0L)
+environment_receipts <- data.frame(
+  receipt = substring(environment_paths, nchar(results_dir) + 2L)
+)
+knitr::kable(environment_receipts, row.names = FALSE)
 ```
 
 ## Results
@@ -185,32 +213,44 @@ each process's `bench` median across process-level replicates. `max_rss_mib`
 and `cpu_percent` are likewise process-level medians from GNU `time -v`.
 
 ```{r results-table}
-if (nrow(r_runs)) {
-  reported <- stats::aggregate(
-    r_runs[c("median_s", "mem_alloc_bytes", "throughput_mib_s", "max_rss_mib", "cpu_percent")],
-    by = list(
-      mode = r_runs$mode,
-      fixture = r_runs$fixture,
-      codec = r_runs$codec,
-      implementation = r_runs$implementation
-    ),
-    FUN = stats::median,
-    na.rm = TRUE
-  )
-  names(reported)[names(reported) == "Group.1"] <- "mode"
-  names(reported)[names(reported) == "Group.2"] <- "fixture"
-  names(reported)[names(reported) == "Group.3"] <- "codec"
-  names(reported)[names(reported) == "Group.4"] <- "implementation"
-  reported$median_s <- signif(reported$median_s, 5)
-  reported$mem_alloc_mib <- signif(reported$mem_alloc_bytes / 1024^2, 5)
-  reported$throughput_mib_s <- signif(reported$throughput_mib_s, 5)
-  reported$max_rss_mib <- signif(reported$max_rss_mib, 5)
-  reported$cpu_percent <- signif(reported$cpu_percent, 5)
-  reported$mem_alloc_bytes <- NULL
-  knitr::kable(reported, row.names = FALSE)
-} else {
-  cat("No benchmark artifacts supplied.\n")
+reported <- stats::aggregate(
+  runs[c("median_s", "mean_s", "throughput_mib_s", "max_rss_mib", "cpu_percent")],
+  by = list(
+    mode = runs$mode,
+    fixture = runs$fixture,
+    codec = runs$codec,
+    implementation = runs$implementation,
+    runtime = runs$runtime
+  ),
+  FUN = stats::median
+)
+for (field in c(
+  "median_s", "mean_s", "throughput_mib_s", "max_rss_mib", "cpu_percent"
+)) {
+  reported[[field]] <- signif(reported[[field]], 5)
 }
+knitr::kable(reported, row.names = FALSE)
+```
+
+R allocation and garbage-collection counts are runtime-specific diagnostics,
+so they are reported separately rather than padded into Python rows.
+
+```{r r-runtime-metrics}
+r_runtime_report <- stats::aggregate(
+  r_runs[c("mem_alloc_bytes", "gc_count")],
+  by = list(
+    mode = r_runs$mode,
+    fixture = r_runs$fixture,
+    codec = r_runs$codec,
+    implementation = r_runs$implementation
+  ),
+  FUN = stats::median
+)
+r_runtime_report$mem_alloc_mib <- signif(
+  r_runtime_report$mem_alloc_bytes / 1024^2, 5
+)
+r_runtime_report$mem_alloc_bytes <- NULL
+knitr::kable(r_runtime_report, row.names = FALSE)
 ```
 
 A speedup is only meaningful within one `mode`, fixture, codec, CPU binding,
@@ -218,57 +258,34 @@ and environment. For each matched pair below, a value above 1 means Rzarrs had
 the lower process-level `bench` median.
 
 ```{r speedup}
-if (nrow(r_runs)) {
-  per_run <- stats::aggregate(
-    r_runs["median_s"],
-    by = list(mode = r_runs$mode, fixture = r_runs$fixture, codec = r_runs$codec,
-              implementation = r_runs$implementation),
-    FUN = stats::median
-  )
-  wide <- reshape(
-    per_run,
-    idvar = c("mode", "fixture", "codec"),
-    timevar = "implementation",
-    direction = "wide"
-  )
-  if (all(c("median_s.Rzarrs", "median_s.Rarr") %in% names(wide))) {
-    wide$rzarrs_speedup_over_rarr <- wide$median_s.Rarr / wide$median_s.Rzarrs
-    wide$rzarrs_speedup_over_rarr <- signif(wide$rzarrs_speedup_over_rarr, 5)
-    knitr::kable(wide, row.names = FALSE)
-  } else {
-    cat("Both implementations are required for a speedup calculation.\n")
-  }
-}
+per_run <- stats::aggregate(
+  r_runs["median_s"],
+  by = list(
+    mode = r_runs$mode,
+    fixture = r_runs$fixture,
+    codec = r_runs$codec,
+    implementation = r_runs$implementation
+  ),
+  FUN = stats::median
+)
+wide <- reshape(
+  per_run,
+  idvar = c("mode", "fixture", "codec"),
+  timevar = "implementation",
+  direction = "wide"
+)
+stopifnot(all(c("median_s.Rzarrs", "median_s.Rarr") %in% names(wide)))
+wide$rzarrs_speedup_over_rarr <- wide$median_s.Rarr / wide$median_s.Rzarrs
+wide$rzarrs_speedup_over_rarr <- signif(wide$rzarrs_speedup_over_rarr, 5)
+knitr::kable(wide, row.names = FALSE)
 ```
 
 ## Zarrista context baseline
 
 Zarrista runs the same local V3 fixtures with the same CPU/NUMA and native
-thread controls, but its result is a NumPy array. The table intentionally omits
-R allocation measurements and does not calculate an Rzarrs/Rarr-style speedup.
-It is a comparison point for a Rust-native Python reader, not a prospective R
-binding measurement.
-
-```{r zarrista-results}
-if (nrow(zarrista_runs)) {
-  zarrista_report <- stats::aggregate(
-    zarrista_runs[c("median_s", "throughput_mib_s", "max_rss_mib", "cpu_percent")],
-    by = list(
-      mode = zarrista_runs$mode,
-      fixture = zarrista_runs$fixture,
-      codec = zarrista_runs$codec
-    ),
-    FUN = stats::median,
-    na.rm = TRUE
-  )
-  for (field in c("median_s", "throughput_mib_s", "max_rss_mib", "cpu_percent")) {
-    zarrista_report[[field]] <- signif(as.numeric(zarrista_report[[field]]), 5)
-  }
-  knitr::kable(zarrista_report, row.names = FALSE)
-} else {
-  cat("No Zarrista artifacts supplied.\n")
-}
-```
+thread controls, but its result is a NumPy array. The unified timing and process-resource table includes Zarrista, while the
+R-only runtime diagnostics remain separate. It is a comparison point for a
+Rust-native Python reader, not a prospective R binding measurement.
 
 ## Visual comparisons
 
@@ -277,45 +294,53 @@ point; visual proximity is not an R-binding claim. The timed operation is the
 loaded-runtime, open-and-materialize request recorded in `measurement_scope`.
 
 ```{r reader-plots, fig.width=11, fig.height=7}
-if (nrow(r_runs) && nrow(zarrista_runs)) {
-  plot_runs <- rbind(
-    r_runs[c("implementation", "mode", "codec", "median_s", "throughput_mib_s", "max_rss_mib")],
-    zarrista_runs[c("implementation", "mode", "codec", "median_s", "throughput_mib_s", "max_rss_mib")]
-  )
-  plot_runs$workload <- paste(plot_runs$mode, plot_runs$codec, sep = " / ")
-  summary_runs <- stats::aggregate(
-    plot_runs[c("median_s", "throughput_mib_s", "max_rss_mib")],
-    by = list(implementation = plot_runs$implementation, workload = plot_runs$workload),
-    FUN = stats::median,
-    na.rm = TRUE
-  )
-  implementations <- c("Rarr", "Rzarrs", "Zarrista")
-  workloads <- c("cold / bytes", "warm / bytes", "cold / gzip(level=1)", "warm / gzip(level=1)")
-  colours <- c(Rarr = "#0072B2", Rzarrs = "#D55E00", Zarrista = "#009E73")
+plot_runs <- runs[
+  c("implementation", "mode", "codec", "median_s", "throughput_mib_s", "max_rss_mib")
+]
+plot_runs$workload <- paste(plot_runs$mode, plot_runs$codec, sep = " / ")
+summary_runs <- stats::aggregate(
+  plot_runs[c("median_s", "throughput_mib_s", "max_rss_mib")],
+  by = list(
+    implementation = plot_runs$implementation,
+    workload = plot_runs$workload
+  ),
+  FUN = stats::median
+)
+implementations <- c("Rarr", "Rzarrs", "Zarrista")
+workloads <- c(
+  "cold / bytes", "warm / bytes", "cold / gzip(level=1)",
+  "warm / gzip(level=1)"
+)
+colours <- c(Rarr = "#0072B2", Rzarrs = "#D55E00", Zarrista = "#009E73")
 
-  draw_metric <- function(metric, label) {
-    old <- par(mfrow = c(2, 2), mar = c(4, 8, 3, 2))
-    on.exit(par(old), add = TRUE)
-    for (workload in workloads) {
-      values <- summary_runs[summary_runs$workload == workload, c("implementation", metric)]
-      values <- values[match(implementations, values$implementation), ]
-      values <- values[!is.na(values[[metric]]), ]
-      x <- values[[metric]]
-      pad <- c(min(x) / 1.8, max(x) * 1.8)
-      plot(x, seq_along(x), log = "x", xlim = pad, yaxt = "n", pch = 19,
-           col = colours[values$implementation], xlab = label, ylab = "", main = workload)
-      axis(2, at = seq_along(x), labels = values$implementation, las = 1)
-      text(x, seq_along(x), labels = format(signif(x, 4), trim = TRUE), pos = 4, cex = 0.8)
-      grid(col = "grey90")
-    }
+draw_metric <- function(metric, label) {
+  old <- par(mfrow = c(2, 2), mar = c(4, 8, 3, 2))
+  on.exit(par(old), add = TRUE)
+  for (workload in workloads) {
+    values <- summary_runs[
+      summary_runs$workload == workload, c("implementation", metric)
+    ]
+    values <- values[match(implementations, values$implementation), ]
+    stopifnot(nrow(values) == length(implementations), !anyNA(values))
+    x <- values[[metric]]
+    pad <- c(min(x) / 1.8, max(x) * 1.8)
+    plot(
+      x, seq_along(x), log = "x", xlim = pad, yaxt = "n", pch = 19,
+      col = colours[values$implementation], xlab = label, ylab = "",
+      main = workload
+    )
+    axis(2, at = seq_along(x), labels = values$implementation, las = 1)
+    text(
+      x, seq_along(x), labels = format(signif(x, 4), trim = TRUE),
+      pos = 4, cex = 0.8
+    )
+    grid(col = "grey90")
   }
-
-  draw_metric("median_s", "Median seconds (lower is better; log scale)")
-  draw_metric("throughput_mib_s", "MiB/s (higher is better; log scale)")
-  draw_metric("max_rss_mib", "Maximum RSS MiB (process diagnostic; log scale)")
-} else {
-  cat("Rarr, Rzarrs, and Zarrista artifacts are all required for plots.\n")
 }
+
+draw_metric("median_s", "Median seconds (lower is better; log scale)")
+draw_metric("throughput_mib_s", "MiB/s (higher is better; log scale)")
+draw_metric("max_rss_mib", "Maximum RSS MiB (process diagnostic; log scale)")
 ```
 
 ## Network-bounded S3 matrix
@@ -337,11 +362,11 @@ as equivalent.
 
 ## Compilation provenance and controlled rebuild gate
 
-The environment blocks record toolchains, binary hashes, and build-affecting
+The environment receipts record toolchains, binary hashes, and build-affecting
 environment variables. They identify what ran, but compiler identity alone
 does **not** prove flag parity—especially for an already-installed Rarr binary.
-Do not attribute the observed gap to library design until the controlled rebuild
-campaign below reproduces it.
+Do not attribute the observed difference to library design until the controlled
+rebuild campaign below reproduces it.
 
 1. Build Rarr and Rzarrs from source in a clean R environment with no user or
    site Makevars overrides; save every compile and link command.

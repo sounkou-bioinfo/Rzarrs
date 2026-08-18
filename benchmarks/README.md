@@ -33,7 +33,7 @@ logical `int32` data in 512 x 512 chunks:
 
 ```sh
 cd /root/Rzarrs
-Rscript tools/make_benchmark_fixtures.R \
+Rscript benchmarks/make_benchmark_fixtures.R \
   --out "$HOME/.cache/Rzarrs/benchmarks/fixtures"
 ```
 
@@ -60,12 +60,12 @@ NUMA_NODE=0
 FIXTURES="$HOME/.cache/Rzarrs/benchmarks/fixtures"
 RESULTS="$HOME/.cache/Rzarrs/benchmarks/results"
 
-tools/run_rzarrs_rarr_bench.sh \
+benchmarks/run_rzarrs_rarr_bench.sh \
   --fixtures "$FIXTURES" --out "$RESULTS" \
   --cpuset "$CPUSET" --numa-node "$NUMA_NODE" \
   --mode warm --reps 5 --iterations 5
 
-sudo tools/run_rzarrs_rarr_bench.sh \
+sudo benchmarks/run_rzarrs_rarr_bench.sh \
   --fixtures "$FIXTURES" --out "$RESULTS" \
   --cpuset "$CPUSET" --numa-node "$NUMA_NODE" \
   --mode cold --reps 5
@@ -74,7 +74,9 @@ sudo tools/run_rzarrs_rarr_bench.sh \
 The runner alternates implementation order by replicate, invokes a new pinned
 R process for each measurement, and records:
 
-- `bench.rds` and `summary.csv`: `bench` time and allocation statistics;
+- `summary.csv`: the runtime-neutral timing schema shared by R and Python;
+- `bench.rds` and `runtime-metrics.csv`: R-only `bench` samples, allocation,
+  and garbage-collection diagnostics;
 - `time-v.txt`: GNU `time -v`, including maximum RSS and CPU percentage;
 - `command.txt`, `session-info.txt`, `fixture.dcf`, stdout, and stderr for each
   replicate;
@@ -110,7 +112,7 @@ python3 -m venv "$HOME/.cache/Rzarrs/zarrista-venv"
 "$HOME/.cache/Rzarrs/zarrista-venv/bin/pip" install . numpy
 
 cd /root/Rzarrs
-tools/run_zarrista_bench.sh \
+benchmarks/run_zarrista_bench.sh \
   --fixtures "$FIXTURES" --out "$RESULTS" \
   --python "$HOME/.cache/Rzarrs/zarrista-venv/bin/python" \
   --zarrista-revision "$ZARRISTA_REVISION" \

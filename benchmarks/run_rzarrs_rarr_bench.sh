@@ -5,7 +5,7 @@ original_args=("$@")
 
 usage() {
   cat <<'EOF'
-Usage: tools/run_rzarrs_rarr_bench.sh --fixtures DIR --out DIR --cpuset LIST --numa-node N [options]
+Usage: benchmarks/run_rzarrs_rarr_bench.sh --fixtures DIR --out DIR --cpuset LIST --numa-node N [options]
 
 Options:
   --fixtures DIR    directory created by make_benchmark_fixtures.R

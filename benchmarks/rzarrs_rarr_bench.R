@@ -120,28 +120,38 @@ dir.create(out, recursive = TRUE, showWarnings = FALSE)
 summary <- data.frame(
   implementation = args$implementation,
   runtime = "R",
+  runtime_version = as.character(getRversion()),
+  implementation_version = package_version(args$implementation),
+  benchmark_engine = "bench",
+  benchmark_engine_version = package_version("bench"),
   measurement_scope = "loaded runtime; open plus full array materialization",
   startup_included = FALSE,
   mode = args$mode,
-  store = args$store,
+  store = normalizePath(args$store, mustWork = TRUE),
   iterations_requested = args$iterations,
   iterations_completed = as.integer(result$n_itr),
   min_s = as.numeric(result$min),
   median_s = as.numeric(result$median),
+  mean_s = as.numeric(result$total_time) / as.integer(result$n_itr),
   total_s = as.numeric(result$total_time),
+  stringsAsFactors = FALSE
+)
+runtime_metrics <- data.frame(
+  implementation = args$implementation,
+  runtime = "R",
   mem_alloc_bytes = as.numeric(result$mem_alloc),
   gc_count = as.integer(result$n_gc),
-  r_version = as.character(getRversion()),
-  rzarrs_version = package_version("Rzarrs"),
-  rarr_version = package_version("Rarr"),
-  bench_version = package_version("bench"),
   stringsAsFactors = FALSE
 )
 saveRDS(result, file.path(out, "bench.rds"))
 utils::write.csv(summary, file.path(out, "summary.csv"), row.names = FALSE)
+utils::write.csv(
+  runtime_metrics, file.path(out, "runtime-metrics.csv"), row.names = FALSE
+)
 write_environment(file.path(out, "session-info.txt"), args)
 fixture_manifest <- file.path(args$store, "benchmark-fixture.dcf")
-if (file.exists(fixture_manifest)) {
-  file.copy(fixture_manifest, file.path(out, "fixture.dcf"), overwrite = TRUE)
-}
+stopifnot(file.exists(fixture_manifest))
+stopifnot(file.copy(
+  fixture_manifest, file.path(out, "fixture.dcf"), overwrite = TRUE
+))
 print(summary, row.names = FALSE)

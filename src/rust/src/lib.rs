@@ -227,8 +227,8 @@ impl ZarrObjectStore {
     /// Open an object-store Zarr backend from a URL.
     ///
     /// Supported URL schemes: `s3://`, `gs://`, `az://`, `https://`,
-    /// `file:///`. URLs ending in `.zarr.zip` or `.zip` are opened as zip
-    /// objects when the `zip` Rust feature is enabled. Credentials are read
+    /// `file:///`. URLs ending in the .zarr.zip or .zip suffix are opened as zip
+    /// objects when zip support is enabled. Credentials are read
     /// from the process environment automatically — set the standard provider env vars
     /// (`AWS_ACCESS_KEY_ID` / `GOOGLE_APPLICATION_CREDENTIALS` /
     /// `AZURE_STORAGE_ACCOUNT` etc.) before calling this function.
@@ -859,14 +859,6 @@ fn shape_to_i32_dims(shape: &[u64]) -> savvy::Result<Vec<i32>> {
         .enumerate()
         .map(|(i, &d)| u64_dim_to_i32(d, &format!("dimension {}", i + 1)))
         .collect()
-}
-
-fn maybe_c_to_r_order<T: Clone>(data: Vec<T>, dims: &[i32]) -> Vec<T> {
-    if dims.len() > 1 {
-        c_to_r_order(&data, dims)
-    } else {
-        data
-    }
 }
 
 const F64_SAFE_INTEGER_MAX_U64: u64 = 9_007_199_254_740_992; // 2^53
@@ -1593,8 +1585,10 @@ fn retrieve_numpy_datetime64(
     let data: Vec<i64> = array
         .retrieve_array_subset::<Vec<i64>>(subset)
         .map_err(|e| savvy::Error::new(&e.to_string()))?;
-    let data = maybe_c_to_r_order(data, dims);
-    let mut out = i64_to_bitpattern_real(&data)?;
+    let mut out = unsafe { OwnedRealSexp::new_without_init(data.len())? };
+    map_c_to_r_order(&data, dims, out.as_mut_slice(), |&value| {
+        f64::from_bits(value as u64)
+    });
     set_time64_attrs(&mut out, "numpy.datetime64", dt.unit, dt.scale_factor.get())?;
     Ok(out.into())
 }
@@ -1611,8 +1605,10 @@ fn retrieve_numpy_timedelta64(
     let data: Vec<i64> = array
         .retrieve_array_subset::<Vec<i64>>(subset)
         .map_err(|e| savvy::Error::new(&e.to_string()))?;
-    let data = maybe_c_to_r_order(data, dims);
-    let mut out = i64_to_bitpattern_real(&data)?;
+    let mut out = unsafe { OwnedRealSexp::new_without_init(data.len())? };
+    map_c_to_r_order(&data, dims, out.as_mut_slice(), |&value| {
+        f64::from_bits(value as u64)
+    });
     set_time64_attrs(
         &mut out,
         "numpy.timedelta64",
@@ -1635,11 +1631,8 @@ fn retrieve_typed(
             let data: Vec<f16> = array
                 .retrieve_array_subset::<Vec<f16>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedRealSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() {
-                out[i] = f64::from(v);
-            }
+            let mut out = unsafe { OwnedRealSexp::new_without_init(n)? };
+            map_c_to_r_order(&data, dims, out.as_mut_slice(), |&value| f64::from(value));
             Ok(out.into())
         }
 
@@ -1647,11 +1640,8 @@ fn retrieve_typed(
             let data: Vec<bf16> = array
                 .retrieve_array_subset::<Vec<bf16>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedRealSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() {
-                out[i] = f64::from(v);
-            }
+            let mut out = unsafe { OwnedRealSexp::new_without_init(n)? };
+            map_c_to_r_order(&data, dims, out.as_mut_slice(), |&value| f64::from(value));
             Ok(out.into())
         }
 
@@ -1659,11 +1649,8 @@ fn retrieve_typed(
             let data: Vec<f32> = array
                 .retrieve_array_subset::<Vec<f32>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedRealSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() {
-                out[i] = v as f64;
-            }
+            let mut out = unsafe { OwnedRealSexp::new_without_init(n)? };
+            map_c_to_r_order(&data, dims, out.as_mut_slice(), |&value| value as f64);
             Ok(out.into())
         }
 
@@ -1671,11 +1658,8 @@ fn retrieve_typed(
             let data: Vec<f64> = array
                 .retrieve_array_subset::<Vec<f64>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedRealSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() {
-                out[i] = v;
-            }
+            let mut out = unsafe { OwnedRealSexp::new_without_init(n)? };
+            map_c_to_r_order(&data, dims, out.as_mut_slice(), |&value| value);
             Ok(out.into())
         }
 
@@ -1683,11 +1667,8 @@ fn retrieve_typed(
             let data: Vec<i8> = array
                 .retrieve_array_subset::<Vec<i8>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedIntegerSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() {
-                out[i] = v as i32;
-            }
+            let mut out = unsafe { OwnedIntegerSexp::new_without_init(n)? };
+            map_c_to_r_order(&data, dims, out.as_mut_slice(), |&value| value as i32);
             Ok(out.into())
         }
 
@@ -1695,11 +1676,8 @@ fn retrieve_typed(
             let data: Vec<i16> = array
                 .retrieve_array_subset::<Vec<i16>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedIntegerSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() {
-                out[i] = v as i32;
-            }
+            let mut out = unsafe { OwnedIntegerSexp::new_without_init(n)? };
+            map_c_to_r_order(&data, dims, out.as_mut_slice(), |&value| value as i32);
             Ok(out.into())
         }
 
@@ -1707,15 +1685,10 @@ fn retrieve_typed(
             let data: Vec<i32> = array
                 .retrieve_array_subset::<Vec<i32>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedIntegerSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() {
-                if v == i32::MIN {
-                    out.set_na(i)?;
-                } else {
-                    out[i] = v;
-                }
-            }
+            let mut out = unsafe { OwnedIntegerSexp::new_without_init(n)? };
+            // R's NA_INTEGER is the i32::MIN bit pattern, so the permutation can
+            // copy all values directly into the final R allocation.
+            copy_c_to_r_order(&data, dims, out.as_mut_slice());
             Ok(out.into())
         }
 
@@ -1723,8 +1696,12 @@ fn retrieve_typed(
             let data: Vec<i64> = array
                 .retrieve_array_subset::<Vec<i64>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let out = i64_to_rzarrs_int64(&data)?;
+            let mut out = unsafe { OwnedRealSexp::new_without_init(n)? };
+            map_c_to_r_order(&data, dims, out.as_mut_slice(), |&value| {
+                f64::from_bits(value as u64)
+            });
+            out.set_class(["Rzarrs_int64"])?;
+            out.set_attrib("storage", scalar_string("i64-bitpattern")?.into())?;
             Ok(out.into())
         }
 
@@ -1732,11 +1709,8 @@ fn retrieve_typed(
             let data: Vec<u8> = array
                 .retrieve_array_subset::<Vec<u8>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedIntegerSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() {
-                out[i] = v as i32;
-            }
+            let mut out = unsafe { OwnedIntegerSexp::new_without_init(n)? };
+            map_c_to_r_order(&data, dims, out.as_mut_slice(), |&value| value as i32);
             Ok(out.into())
         }
 
@@ -1744,11 +1718,8 @@ fn retrieve_typed(
             let data: Vec<u16> = array
                 .retrieve_array_subset::<Vec<u16>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedIntegerSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() {
-                out[i] = v as i32;
-            }
+            let mut out = unsafe { OwnedIntegerSexp::new_without_init(n)? };
+            map_c_to_r_order(&data, dims, out.as_mut_slice(), |&value| value as i32);
             Ok(out.into())
         }
 
@@ -1756,11 +1727,8 @@ fn retrieve_typed(
             let data: Vec<u32> = array
                 .retrieve_array_subset::<Vec<u32>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedRealSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() {
-                out[i] = v as f64;
-            }
+            let mut out = unsafe { OwnedRealSexp::new_without_init(n)? };
+            map_c_to_r_order(&data, dims, out.as_mut_slice(), |&value| value as f64);
             Ok(out.into())
         }
 
@@ -1768,8 +1736,12 @@ fn retrieve_typed(
             let data: Vec<u64> = array
                 .retrieve_array_subset::<Vec<u64>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let out = u64_to_rzarrs_uint64(&data)?;
+            let mut out = unsafe { OwnedRealSexp::new_without_init(n)? };
+            map_c_to_r_order(&data, dims, out.as_mut_slice(), |&value| {
+                f64::from_bits(value)
+            });
+            out.set_class(["Rzarrs_uint64"])?;
+            out.set_attrib("storage", scalar_string("u64-bitpattern")?.into())?;
             Ok(out.into())
         }
 
@@ -1777,17 +1749,11 @@ fn retrieve_typed(
             let data: Vec<Complex32> = array
                 .retrieve_array_subset::<Vec<Complex32>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedComplexSexp::new(n)?;
-            for (i, value) in data.iter().enumerate() {
-                out.set_elt(
-                    i,
-                    RComplex64 {
-                        re: f64::from(value.re),
-                        im: f64::from(value.im),
-                    },
-                )?;
-            }
+            let mut out = unsafe { OwnedComplexSexp::new_without_init(n)? };
+            map_c_to_r_order(&data, dims, out.as_mut_slice(), |value| RComplex64 {
+                re: f64::from(value.re),
+                im: f64::from(value.im),
+            });
             out.set_class(["Rzarrs_complex64", "complex"])?;
             Ok(out.into())
         }
@@ -1796,17 +1762,11 @@ fn retrieve_typed(
             let data: Vec<NumComplex64> = array
                 .retrieve_array_subset::<Vec<NumComplex64>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedComplexSexp::new(n)?;
-            for (i, value) in data.iter().enumerate() {
-                out.set_elt(
-                    i,
-                    RComplex64 {
-                        re: value.re,
-                        im: value.im,
-                    },
-                )?;
-            }
+            let mut out = unsafe { OwnedComplexSexp::new_without_init(n)? };
+            map_c_to_r_order(&data, dims, out.as_mut_slice(), |value| RComplex64 {
+                re: value.re,
+                im: value.im,
+            });
             out.set_class(["Rzarrs_complex128", "complex"])?;
             Ok(out.into())
         }
@@ -1815,11 +1775,8 @@ fn retrieve_typed(
             let data: Vec<bool> = array
                 .retrieve_array_subset::<Vec<bool>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
-            let mut out = OwnedLogicalSexp::new(n)?;
-            for (i, &v) in data.iter().enumerate() {
-                out.set_elt(i, v)?;
-            }
+            let mut out = unsafe { OwnedLogicalSexp::new_without_init(n)? };
+            try_for_each_c_to_r_order(&data, dims, |index, &value| out.set_elt(index, value))?;
             Ok(out.into())
         }
 
@@ -1827,11 +1784,10 @@ fn retrieve_typed(
             let data: Vec<String> = array
                 .retrieve_array_subset::<Vec<String>>(subset)
                 .map_err(|e| savvy::Error::new(&e.to_string()))?;
-            let data = maybe_c_to_r_order(data, dims);
             let mut out = OwnedStringSexp::new(n)?;
-            for (i, v) in data.iter().enumerate() {
-                out.set_elt(i, v.as_str())?;
-            }
+            try_for_each_c_to_r_order(&data, dims, |index, value| {
+                out.set_elt(index, value.as_str())
+            })?;
             Ok(out.into())
         }
 
@@ -2138,43 +2094,84 @@ fn init_vcf_from_store(store: Arc<dyn ReadListStorage>) -> savvy::Result<ZarrVcf
     })
 }
 
-fn c_to_r_order<T: Clone>(data: &[T], dims: &[i32]) -> Vec<T> {
+fn try_for_each_c_to_r_order<T, E, F>(data: &[T], dims: &[i32], mut write: F) -> Result<(), E>
+where
+    F: FnMut(usize, &T) -> Result<(), E>,
+{
     let ndim = dims.len();
     if ndim <= 1 {
-        return data.to_vec();
+        for (index, value) in data.iter().enumerate() {
+            write(index, value)?;
+        }
+        return Ok(());
     }
 
-    let dims_u64: Vec<u64> = dims.iter().map(|&d| d as u64).collect();
-
-    let mut c_strides = vec![1u64; ndim];
-    for i in (0..ndim - 1).rev() {
-        c_strides[i] = c_strides[i + 1] * dims_u64[i + 1];
+    let dims: Vec<usize> = dims.iter().map(|&dim| dim as usize).collect();
+    if ndim == 2 {
+        let (rows, cols) = (dims[0], dims[1]);
+        const BLOCK: usize = 32;
+        for row_start in (0..rows).step_by(BLOCK) {
+            for col_start in (0..cols).step_by(BLOCK) {
+                let row_end = (row_start + BLOCK).min(rows);
+                let col_end = (col_start + BLOCK).min(cols);
+                for row in row_start..row_end {
+                    let source_offset = row * cols;
+                    for col in col_start..col_end {
+                        write(row + col * rows, &data[source_offset + col])?;
+                    }
+                }
+            }
+        }
+        return Ok(());
     }
 
-    let mut r_strides = vec![1u64; ndim];
-    for i in 1..ndim {
-        r_strides[i] = r_strides[i - 1] * dims_u64[i - 1];
+    let mut r_strides = vec![1usize; ndim];
+    for axis in 1..ndim {
+        r_strides[axis] = r_strides[axis - 1] * dims[axis - 1];
     }
 
-    let n = data.len();
-    if n == 0 {
+    let mut coords = vec![0usize; ndim];
+    let mut r_pos = 0usize;
+    for value in data {
+        write(r_pos, value)?;
+        for axis in (0..ndim).rev() {
+            coords[axis] += 1;
+            r_pos += r_strides[axis];
+            if coords[axis] < dims[axis] {
+                break;
+            }
+            coords[axis] = 0;
+            r_pos -= dims[axis] * r_strides[axis];
+        }
+    }
+    Ok(())
+}
+
+fn map_c_to_r_order<T, U, F>(data: &[T], dims: &[i32], result: &mut [U], mut map: F)
+where
+    F: FnMut(&T) -> U,
+{
+    let outcome = try_for_each_c_to_r_order(data, dims, |index, value| {
+        result[index] = map(value);
+        Ok::<(), std::convert::Infallible>(())
+    });
+    match outcome {
+        Ok(()) => {}
+        Err(error) => match error {},
+    }
+}
+
+fn copy_c_to_r_order<T: Clone>(data: &[T], dims: &[i32], result: &mut [T]) {
+    map_c_to_r_order(data, dims, result, Clone::clone);
+}
+
+#[cfg(test)]
+fn c_to_r_order<T: Clone>(data: &[T], dims: &[i32]) -> Vec<T> {
+    if data.is_empty() {
         return Vec::new();
     }
-    let mut result = vec![data[0].clone(); n];
-    for linear in 0..n {
-        let mut remaining = linear as u64;
-        let mut coords = vec![0u64; ndim];
-        for i in 0..ndim {
-            coords[i] = remaining / c_strides[i];
-            remaining %= c_strides[i];
-        }
-        let r_pos: usize = coords
-            .iter()
-            .zip(&r_strides)
-            .map(|(&c, &s)| c * s)
-            .sum::<u64>() as usize;
-        result[r_pos] = data[linear].clone();
-    }
+    let mut result = vec![data[0].clone(); data.len()];
+    copy_c_to_r_order(data, dims, &mut result);
     result
 }
 
@@ -2647,15 +2644,8 @@ fn read_bool_2d_runs(
 }
 
 fn fill_i32_array(data: &[i32], dims: &[i32]) -> savvy::Result<savvy::Sexp> {
-    let reordered = maybe_c_to_r_order(data.to_vec(), dims);
-    let mut out = OwnedIntegerSexp::new(reordered.len())?;
-    for (i, &v) in reordered.iter().enumerate() {
-        if v == i32::MIN {
-            out.set_na(i)?;
-        } else {
-            out[i] = v;
-        }
-    }
+    let mut out = unsafe { OwnedIntegerSexp::new_without_init(data.len())? };
+    copy_c_to_r_order(data, dims, out.as_mut_slice());
     if dims.len() > 1 {
         out.set_dim(dims)?;
     }
@@ -2663,11 +2653,8 @@ fn fill_i32_array(data: &[i32], dims: &[i32]) -> savvy::Result<savvy::Sexp> {
 }
 
 fn fill_logical_array(data: &[bool], dims: &[i32]) -> savvy::Result<savvy::Sexp> {
-    let reordered = maybe_c_to_r_order(data.to_vec(), dims);
-    let mut out = OwnedLogicalSexp::new(reordered.len())?;
-    for (i, &v) in reordered.iter().enumerate() {
-        out.set_elt(i, v)?;
-    }
+    let mut out = unsafe { OwnedLogicalSexp::new_without_init(data.len())? };
+    try_for_each_c_to_r_order(data, dims, |index, &value| out.set_elt(index, value))?;
     if dims.len() > 1 {
         out.set_dim(dims)?;
     }
@@ -2729,7 +2716,7 @@ impl ZarrVcf {
 
 #[cfg(test)]
 mod tests {
-    use super::c_to_r_order;
+    use super::{c_to_r_order, map_c_to_r_order};
 
     #[test]
     fn c_to_r_order_roundtrip_1d_identity() {
@@ -2750,32 +2737,59 @@ mod tests {
     }
 
     #[test]
-    fn c_to_r_order_3d_shape_is_permutation() {
-        let data: Vec<i32> = (1..=24).collect();
-        let dims = vec![2, 3, 4];
-        let first = c_to_r_order(&data, &dims);
-
-        let mut seen = vec![false; first.len()];
-        for &v in &first {
-            assert!((1..=24).contains(&v));
-            seen[(v - 1) as usize] = true;
-        }
-        assert!(seen.iter().all(|x| *x));
-        assert_eq!(first.len(), 24);
+    fn c_to_r_order_2x2x2_example() {
+        let data: Vec<i32> = (1..=8).collect();
+        let dims = vec![2, 2, 2];
+        let reordered = c_to_r_order(&data, &dims);
+        assert_eq!(reordered, vec![1, 5, 3, 7, 2, 6, 4, 8]);
     }
 
     #[test]
-    fn c_to_r_order_4d_shape_is_permutation() {
-        let data: Vec<i32> = (1..=120).collect();
-        let dims = vec![2, 3, 4, 5];
-        let first = c_to_r_order(&data, &dims);
+    fn c_to_r_order_matches_reference_for_bounded_shapes() {
+        assert_eq!(c_to_r_order(&[7], &[]), vec![7]);
 
-        let mut seen = vec![false; first.len()];
-        for &v in &first {
-            assert!((1..=120).contains(&v));
-            seen[(v - 1) as usize] = true;
+        for rank in 1..=5 {
+            for shape_code in 0..5usize.pow(rank as u32) {
+                let mut code = shape_code;
+                let mut dims = Vec::with_capacity(rank);
+                for _ in 0..rank {
+                    dims.push((code % 5) as i32);
+                    code /= 5;
+                }
+
+                let n = dims.iter().map(|&dim| dim as usize).product();
+                let data: Vec<usize> = (0..n).collect();
+                let actual = c_to_r_order(&data, &dims);
+                let mut expected = vec![0; n];
+
+                let mut c_strides = vec![1usize; rank];
+                for axis in (0..rank.saturating_sub(1)).rev() {
+                    c_strides[axis] = c_strides[axis + 1] * dims[axis + 1] as usize;
+                }
+                let mut r_strides = vec![1usize; rank];
+                for axis in 1..rank {
+                    r_strides[axis] = r_strides[axis - 1] * dims[axis - 1] as usize;
+                }
+
+                for (linear, &value) in data.iter().enumerate() {
+                    let mut remaining = linear;
+                    let mut r_pos = 0;
+                    for axis in 0..rank {
+                        let coordinate = remaining / c_strides[axis];
+                        remaining %= c_strides[axis];
+                        r_pos += coordinate * r_strides[axis];
+                    }
+                    expected[r_pos] = value;
+                }
+
+                assert_eq!(actual, expected, "shape {dims:?}");
+
+                let mut mapped = vec![0u64; n];
+                map_c_to_r_order(&data, &dims, &mut mapped, |&value| value as u64 * 3 + 1);
+                let expected_mapped: Vec<u64> =
+                    expected.iter().map(|&value| value as u64 * 3 + 1).collect();
+                assert_eq!(mapped, expected_mapped, "mapped shape {dims:?}");
+            }
         }
-        assert!(seen.iter().all(|x| *x));
-        assert_eq!(first.len(), 120);
     }
 }

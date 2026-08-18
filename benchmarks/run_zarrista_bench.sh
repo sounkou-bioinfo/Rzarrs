@@ -5,7 +5,7 @@ original_args=("$@")
 
 usage() {
   cat <<'EOF'
-Usage: tools/run_zarrista_bench.sh --fixtures DIR --out DIR --python PATH --zarrista-revision SHA --cpuset CPU --numa-node N [options]
+Usage: benchmarks/run_zarrista_bench.sh --fixtures DIR --out DIR --python PATH --zarrista-revision SHA --cpuset CPU --numa-node N [options]
 
 Options:
   --fixtures DIR          directory created by make_benchmark_fixtures.R
@@ -82,7 +82,7 @@ thread_env=(
   TOKIO_WORKER_THREADS=1
 )
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-driver="$root/tools/zarrista_bench.py"
+driver="$root/benchmarks/zarrista_bench.py"
 [[ -f "$driver" ]] || die "missing Zarrista benchmark driver: $driver"
 fixtures="$(cd "$fixtures" && pwd)"
 out="$(mkdir -p "$out" && cd "$out" && pwd)"

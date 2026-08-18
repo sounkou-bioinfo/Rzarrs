@@ -2,7 +2,7 @@
 
 usage <- function(status = 0L) {
   cat(
-    "Usage: Rscript tools/make_benchmark_fixtures.R --out DIR [options]\n\n",
+    "Usage: Rscript benchmarks/make_benchmark_fixtures.R --out DIR [options]\n\n",
     "Create numeric Zarr V3 fixtures that Rzarrs and Rarr both read.\n\n",
     "Options:\n",
     "  --out DIR          destination directory (required)\n",

@@ -116,6 +116,10 @@ def main() -> None:
     summary = {
         "implementation": "Zarrista",
         "runtime": "Python",
+        "runtime_version": platform.python_version(),
+        "implementation_version": zarrista.__version__,
+        "benchmark_engine": "time.perf_counter",
+        "benchmark_engine_version": platform.python_version(),
         "measurement_scope": "loaded runtime; open plus full array materialization",
         "startup_included": False,
         "mode": args.mode,
@@ -126,15 +130,6 @@ def main() -> None:
         "median_s": statistics.median(elapsed),
         "mean_s": statistics.fmean(elapsed),
         "total_s": sum(elapsed),
-        "mem_alloc_bytes": "",
-        "gc_count": "",
-        "r_version": "",
-        "rzarrs_version": "",
-        "rarr_version": "",
-        "bench_version": "",
-        "python_version": platform.python_version(),
-        "zarrista_version": getattr(zarrista, "__version__", "unknown"),
-        "zarrista_revision": args.zarrista_revision,
     }
     with (args.out / "summary.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=summary.keys())
@@ -147,7 +142,7 @@ def main() -> None:
                 "python": sys.version,
                 "platform": platform.platform(),
                 "zarrista_revision": args.zarrista_revision,
-                "zarrista_version": getattr(zarrista, "__version__", "unknown"),
+                "zarrista_version": zarrista.__version__,
             },
             handle,
             indent=2,
