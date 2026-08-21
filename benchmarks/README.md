@@ -52,6 +52,8 @@ only after setting equivalent processing, decompression, and decoding budgets
 explicitly. Do not use an SMT sibling or a mixed P/E core. A warm run pre-reads
 the relevant fixture in each fresh R process. A cold run drops the Linux page
 cache before **every** process-level replicate and consequently requires root.
+Cold R reads use one direct `proc.time()` evaluation because `bench::mark()`
+performs an untimed bookkeeping evaluation that would consume the cold read.
 
 ```sh
 cd /root/Rzarrs
@@ -75,9 +77,9 @@ The runner alternates implementation order by replicate, invokes a new pinned
 R process for each measurement, and records:
 
 - `summary.csv`: the runtime-neutral timing schema shared by R and Python;
-- `bench.rds` and `runtime-metrics.csv`: R-only `bench` samples, cumulative
-  R-profiled allocation, and R garbage-collection diagnostics (not peak RSS or
-  native Rust/C allocation);
+- `bench.rds` and `runtime-metrics.csv`: warm-R-only `bench` samples,
+  cumulative R-profiled allocation, and R garbage-collection diagnostics (not
+  peak RSS or native Rust/C allocation); cold runs intentionally omit them;
 - `time-v.txt`: GNU `time -v`, including maximum RSS and CPU percentage;
 - `command.txt`, `session-info.txt`, `fixture.dcf`, stdout, and stderr for each
   replicate;
@@ -93,6 +95,21 @@ RZARRS_BENCH_RESULTS="$RESULTS" \
 
 Do not compare results across revisions, fixture sizes/codecs, cache modes,
 thread placements, or hardware as though they were the same workload.
+
+## Large-payload diagnostic
+
+[`benchmark_large_payload.md`](benchmark_large_payload.md) increases the warm
+bytes workload to a 1 GiB logical array while keeping the chunk count at 64. It
+uses five fresh-process replicates and three timed iterations per process. The
+report is deliberately separate from the primary warm/cold matrix because its
+purpose is to test payload scaling, not to pool unlike fixture sizes.
+
+Render it from its own strict artifact directory with:
+
+```sh
+RZARRS_LARGE_BENCH_RESULTS="$HOME/.cache/Rzarrs/benchmarks/large-results" \
+  Rscript -e 'rmarkdown::render("benchmarks/benchmark_large_payload.Rmd")'
+```
 
 ## Zarrista context baseline
 

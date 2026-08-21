@@ -38,19 +38,24 @@ R-binding comparison or folded into the Rzarrs-versus-Rarr speedup.
 
 ## Method
 
-The driver uses `bench::mark()` for per-process elapsed time and
-R-runtime allocation diagnostics. Package loading occurs before
-`bench::mark()`; Zarrista likewise imports its Python API before
-`time.perf_counter()` starts. Thus `median_s` measures a meaningful
+Warm R runs use `bench::mark()` for elapsed time and R-runtime
+allocation diagnostics. Cold R runs use exactly one direct `proc.time()`
+evaluation; `bench::mark()` cannot measure a cold read because it
+evaluates the expression once for result and memory bookkeeping before
+its timed iterations. Zarrista uses `time.perf_counter()` and likewise
+performs exactly one timed evaluation in cold mode. Package/API loading
+occurs before all timers. Thus `median_s` measures a meaningful
 request—open the store/array and fully materialize its payload—not
 R/Python process or library startup.
 
-`bench::mark()` reports cumulative bytes allocated through R’s memory
-profiler during its separate memory-measurement evaluation. This is not
-peak, live, net, or retained memory, and it excludes Rust/C allocator
-activity. Its GC count is R GC activity only. GNU `time -v` deliberately
-remains process-inclusive: `max_rss_mib` is the whole fresh process’s
-peak RSS, including startup, untimed warmup when present, and all timed
+For warm R runs, `bench::mark()` reports cumulative bytes allocated
+through R’s memory profiler during its separate memory-measurement
+evaluation. This is not peak, live, net, or retained memory, and it
+excludes Rust/C allocator activity. No allocation profile is collected
+in cold processes because doing so would consume the cold read. GC
+counts are R GC activity only. GNU `time -v` deliberately remains
+process-inclusive: `max_rss_mib` is the whole fresh process’s peak RSS,
+including startup, untimed warmup when present, and all timed
 iterations. RSS and CPU are diagnostics, not the elapsed-time
 denominator.
 
@@ -69,9 +74,10 @@ and records its exact upstream Git revision and Python environment. Warm
 and cold cache data are distinct workloads and must never be pooled. In
 warm mode, each loaded process performs one untimed full
 materialization, does not drop the Linux page cache, and then runs five
-timed iterations. In cold mode, the runner executes `sync` and drops the
-Linux page cache before every fresh measured process, performs no
-untimed read, and runs one timed iteration. CPU-cache state is not
+timed iterations. In cold mode, the runner prepares the output
+directory, executes `sync`, drops the Linux page cache before every
+fresh measured process, performs no untimed read or profiling
+evaluation, and runs one timed iteration. CPU-cache state is not
 controlled.
 
 ``` sh
@@ -101,12 +107,14 @@ RZARRS_BENCH_RESULTS="$HOME/.cache/Rzarrs/benchmarks/results" \
 
 ## Recorded environment
 
-Every run directory contains `bench.rds`, `summary.csv`, GNU `time -v`
-output, the exact command line, R session information, and its fixture
-manifest. Each cache-mode directory has `environment.txt`, including
-source revision/status, CPU and NUMA topology, package versions, and run
-configuration. The report below only aggregates artifacts that share
-this result directory.
+Every run directory contains `summary.csv`, GNU `time -v` output, the
+exact command line, runtime/session information, and its fixture
+manifest. Warm R runs additionally contain `bench.rds` and
+`runtime-metrics.csv`; cold R runs intentionally contain neither because
+a profiling evaluation would consume the cold read. Each cache-mode
+directory has `environment.txt`, including source revision/status, CPU
+and NUMA topology, package versions, and run configuration. The report
+below only aggregates artifacts that share this result directory.
 
 ``` r
 read_time_v <- function(path) {
@@ -185,7 +193,9 @@ runtime_metric_fields <- c(
   "implementation", "runtime", "mem_alloc_bytes", "gc_count"
 )
 stopifnot(
-  length(runtime_metric_paths) == sum(runs$runtime == "R"),
+  length(runtime_metric_paths) == sum(
+    runs$runtime == "R" & runs$mode == "warm"
+  ),
   all(vapply(
     raw_runtime_metrics,
     function(result) {
@@ -203,12 +213,17 @@ runtime_metrics <- do.call(rbind, Map(
   raw_runtime_metrics,
   runtime_metric_paths
 ))
-r_runs <- merge(
-  subset(runs, runtime == "R"), runtime_metrics,
+r_runs <- subset(runs, runtime == "R")
+r_runtime_runs <- merge(
+  subset(r_runs, mode == "warm"), runtime_metrics,
   by = c("run_dir", "implementation", "runtime"), sort = FALSE
 )
 zarrista_runs <- subset(runs, implementation == "Zarrista")
-stopifnot(!anyNA(r_runs), nrow(r_runs) == sum(runs$runtime == "R"))
+stopifnot(
+  !anyNA(r_runs),
+  !anyNA(r_runtime_runs),
+  nrow(r_runtime_runs) == sum(runs$runtime == "R" & runs$mode == "warm")
+)
 ```
 
 ``` r
@@ -231,10 +246,10 @@ knitr::kable(environment_receipts, row.names = FALSE)
 
 ## Results
 
-`bench` repeats inside a process. The table therefore reports the median
-of each process’s `bench` median across process-level replicates.
-`max_rss_mib` and `cpu_percent` are likewise process-level medians from
-GNU `time -v`.
+The table reports the median across process-level replicates: each
+warm-process value is its `bench` median, while each cold-process value
+is its sole direct timing. `max_rss_mib` and `cpu_percent` are
+process-level medians from GNU `time -v`.
 
 ``` r
 reported <- stats::aggregate(
@@ -258,18 +273,18 @@ knitr::kable(reported, row.names = FALSE)
 
 | mode | fixture                   | codec         | implementation | runtime | median_s |   mean_s | throughput_mib_s | max_rss_mib | cpu_percent |
 |:-----|:--------------------------|:--------------|:---------------|:--------|---------:|---------:|-----------------:|------------:|------------:|
-| cold | numeric-uncompressed.zarr | bytes         | Zarrista       | Python  | 0.194290 | 0.194290 |           329.40 |      105.88 |          52 |
-| warm | numeric-uncompressed.zarr | bytes         | Zarrista       | Python  | 0.024598 | 0.024811 |          2601.90 |      106.52 |         100 |
-| cold | numeric-gzip.zarr         | gzip(level=1) | Zarrista       | Python  | 0.261200 | 0.261200 |           245.03 |      106.52 |          73 |
-| warm | numeric-gzip.zarr         | gzip(level=1) | Zarrista       | Python  | 0.164090 | 0.164600 |           390.04 |      107.38 |          99 |
-| cold | numeric-uncompressed.zarr | bytes         | Rarr           | R       | 0.181430 | 0.181430 |           352.75 |      369.16 |          87 |
-| warm | numeric-uncompressed.zarr | bytes         | Rarr           | R       | 0.142700 | 0.144050 |           448.50 |      397.87 |          99 |
-| cold | numeric-gzip.zarr         | gzip(level=1) | Rarr           | R       | 0.318080 | 0.318080 |           201.20 |      394.32 |          90 |
-| warm | numeric-gzip.zarr         | gzip(level=1) | Rarr           | R       | 0.295520 | 0.295200 |           216.56 |      434.73 |          99 |
-| cold | numeric-uncompressed.zarr | bytes         | Rzarrs         | R       | 0.137660 | 0.137660 |           464.92 |      313.72 |          81 |
-| warm | numeric-uncompressed.zarr | bytes         | Rzarrs         | R       | 0.112310 | 0.120950 |           569.83 |      442.63 |          99 |
-| cold | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         | R       | 0.262220 | 0.262220 |           244.07 |      314.32 |          88 |
-| warm | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         | R       | 0.236160 | 0.244490 |           271.00 |      443.54 |          99 |
+| cold | numeric-uncompressed.zarr | bytes         | Zarrista       | Python  | 0.194430 | 0.194430 |           329.17 |      105.73 |          51 |
+| warm | numeric-uncompressed.zarr | bytes         | Zarrista       | Python  | 0.024569 | 0.024664 |          2604.90 |      106.41 |          99 |
+| cold | numeric-gzip.zarr         | gzip(level=1) | Zarrista       | Python  | 0.262680 | 0.262680 |           243.65 |      106.52 |          74 |
+| warm | numeric-gzip.zarr         | gzip(level=1) | Zarrista       | Python  | 0.164380 | 0.164190 |           389.33 |      107.26 |          99 |
+| cold | numeric-uncompressed.zarr | bytes         | Rarr           | R       | 0.268000 | 0.268000 |           238.81 |      244.01 |          79 |
+| warm | numeric-uncompressed.zarr | bytes         | Rarr           | R       | 0.143490 | 0.158530 |           446.03 |      435.61 |          99 |
+| cold | numeric-gzip.zarr         | gzip(level=1) | Rarr           | R       | 0.346000 | 0.346000 |           184.97 |      244.79 |          82 |
+| warm | numeric-gzip.zarr         | gzip(level=1) | Rarr           | R       | 0.272300 | 0.272450 |           235.03 |      438.53 |          99 |
+| cold | numeric-uncompressed.zarr | bytes         | Rzarrs         | R       | 0.234000 | 0.234000 |           273.50 |      224.53 |          71 |
+| warm | numeric-uncompressed.zarr | bytes         | Rzarrs         | R       | 0.111170 | 0.120100 |           575.71 |      442.86 |          99 |
+| cold | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         | R       | 0.296000 | 0.296000 |           216.22 |      225.28 |          80 |
+| warm | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         | R       | 0.234640 | 0.242720 |           272.76 |      443.62 |          99 |
 
 Cumulative R-profiled allocation and R garbage-collection counts are
 runtime-specific diagnostics, so they are reported separately rather
@@ -278,12 +293,12 @@ or peak memory.
 
 ``` r
 r_runtime_report <- stats::aggregate(
-  r_runs[c("mem_alloc_bytes", "gc_count")],
+  r_runtime_runs[c("mem_alloc_bytes", "gc_count")],
   by = list(
-    mode = r_runs$mode,
-    fixture = r_runs$fixture,
-    codec = r_runs$codec,
-    implementation = r_runs$implementation
+    mode = r_runtime_runs$mode,
+    fixture = r_runtime_runs$fixture,
+    codec = r_runtime_runs$codec,
+    implementation = r_runtime_runs$implementation
   ),
   FUN = stats::median
 )
@@ -296,18 +311,14 @@ knitr::kable(r_runtime_report, row.names = FALSE)
 
 | mode | fixture                   | codec         | implementation | gc_count | r_cumulative_alloc_mib |
 |:-----|:--------------------------|:--------------|:---------------|---------:|-----------------------:|
-| cold | numeric-uncompressed.zarr | bytes         | Rarr           |        5 |                321.570 |
-| warm | numeric-uncompressed.zarr | bytes         | Rarr           |       19 |                320.650 |
-| cold | numeric-gzip.zarr         | gzip(level=1) | Rarr           |        5 |                407.730 |
-| warm | numeric-gzip.zarr         | gzip(level=1) | Rarr           |       28 |                406.800 |
-| cold | numeric-uncompressed.zarr | bytes         | Rzarrs         |        1 |                 64.087 |
+| warm | numeric-uncompressed.zarr | bytes         | Rarr           |       20 |                320.650 |
+| warm | numeric-gzip.zarr         | gzip(level=1) | Rarr           |       26 |                406.800 |
 | warm | numeric-uncompressed.zarr | bytes         | Rzarrs         |        4 |                 64.034 |
-| cold | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         |        1 |                 64.087 |
 | warm | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         |        4 |                 64.034 |
 
 A speedup is only meaningful within one `mode`, fixture, codec, CPU
 binding, and environment. For each matched pair below, a value above 1
-means Rzarrs had the lower process-level `bench` median.
+means Rzarrs had the lower process-level median.
 
 ``` r
 per_run <- stats::aggregate(
@@ -334,10 +345,10 @@ knitr::kable(wide, row.names = FALSE)
 
 | mode | fixture                   | codec         | median_s.Rarr | median_s.Rzarrs | rzarrs_speedup_over_rarr |
 |:-----|:--------------------------|:--------------|--------------:|----------------:|-------------------------:|
-| cold | numeric-uncompressed.zarr | bytes         |     0.1814320 |       0.1376574 |                   1.3180 |
-| warm | numeric-uncompressed.zarr | bytes         |     0.1426969 |       0.1123149 |                   1.2705 |
-| cold | numeric-gzip.zarr         | gzip(level=1) |     0.3180841 |       0.2622211 |                   1.2130 |
-| warm | numeric-gzip.zarr         | gzip(level=1) |     0.2955242 |       0.2361595 |                   1.2514 |
+| cold | numeric-uncompressed.zarr | bytes         |     0.2680000 |       0.2340000 |                   1.1453 |
+| warm | numeric-uncompressed.zarr | bytes         |     0.1434875 |       0.1111669 |                   1.2907 |
+| cold | numeric-gzip.zarr         | gzip(level=1) |     0.3460000 |       0.2960000 |                   1.1689 |
+| warm | numeric-gzip.zarr         | gzip(level=1) |     0.2723028 |       0.2346424 |                   1.1605 |
 
 ## Zarrista context baseline
 

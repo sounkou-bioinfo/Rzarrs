@@ -2114,10 +2114,10 @@ where
             for col_start in (0..cols).step_by(BLOCK) {
                 let row_end = (row_start + BLOCK).min(rows);
                 let col_end = (col_start + BLOCK).min(cols);
-                for row in row_start..row_end {
-                    let source_offset = row * cols;
-                    for col in col_start..col_end {
-                        write(row + col * rows, &data[source_offset + col])?;
+                for col in col_start..col_end {
+                    let target_offset = col * rows;
+                    for row in row_start..row_end {
+                        write(target_offset + row, &data[row * cols + col])?;
                     }
                 }
             }

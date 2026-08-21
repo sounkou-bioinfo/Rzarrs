@@ -14,7 +14,7 @@ Options:
   --numa-node N     NUMA node to bind CPU and memory allocations to
   --mode MODE       warm or cold (default: warm)
   --reps N          process-level replicates (default: 5)
-  --iterations N    bench iterations per warm process (default: 5; cold uses 1)
+  --iterations N    timed iterations per warm process (default: 5; cold uses 1)
 
 Warm measurements pre-read the same fixture in each fresh process. Cold
 measurements drop the Linux page cache before every process-level replicate,
@@ -164,10 +164,13 @@ run_one() {
   local -a cmd
 
   if [[ "$mode" == "cold" ]]; then
-    drop_caches
     run_iterations=1
   fi
+  rm -rf "$destination"
   mkdir -p "$destination"
+  if [[ "$mode" == "cold" ]]; then
+    drop_caches
+  fi
   cmd=(
     env "${thread_env[@]}"
     numactl --cpunodebind="$numa_node" --membind="$numa_node"

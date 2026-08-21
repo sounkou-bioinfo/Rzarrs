@@ -166,10 +166,13 @@ run_one() {
   local -a cmd
 
   if [[ "$mode" == "cold" ]]; then
-    drop_caches
     run_iterations=1
   fi
+  rm -rf "$destination"
   mkdir -p "$destination"
+  if [[ "$mode" == "cold" ]]; then
+    drop_caches
+  fi
   cmd=(
     env "${thread_env[@]}"
     numactl --cpunodebind="$numa_node" --membind="$numa_node"

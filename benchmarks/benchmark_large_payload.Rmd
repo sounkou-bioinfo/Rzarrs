@@ -1,0 +1,214 @@
+---
+title: "Rzarrs large-payload warm-read diagnostic"
+output:
+  github_document:
+    toc: true
+params:
+  results_dir: !r Sys.getenv("RZARRS_LARGE_BENCH_RESULTS", unset = "")
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+results_dir <- params$results_dir
+stopifnot(nzchar(results_dir), dir.exists(results_dir))
+results_dir <- normalizePath(results_dir, mustWork = TRUE)
+```
+
+## Question
+
+This diagnostic increases the logical payload from 64 MiB to 1 GiB to test
+whether the warm uncompressed Rzarrs--Zarrista gap is predominantly fixed
+wrapper overhead. It does not attribute the remaining gap to one cause.
+
+The fixture is a Zarr V3 `16384 x 16384` `int32` array with the bytes codec and
+64 chunks of `2048 x 2048`. The logical payload is therefore 16 times larger
+than the primary benchmark while the chunk count remains fixed at 64. Only the
+warm bytes workload is included: gzip and cold-cache behavior answer different
+questions.
+
+Zarrista remains a Python/NumPy context point, not an R-binding comparison.
+Compiler/linker parity between the installed artifacts has not been established,
+so residual differences must not be described as flag-independent.
+
+## Method
+
+Each implementation ran in five fresh processes pinned to CPU 0 and NUMA node
+0, with Blosc, Rayon, Tokio, OpenMP, and BLAS thread controls fixed at one. Each
+process performed one untimed full materialization followed by three timed
+open-plus-full-materialization iterations. Runtime and package startup occurred
+before the timers. R used `bench::mark()` and Zarrista used
+`time.perf_counter()`.
+
+No allocation or RSS comparison is reported here. `bench` allocation tracks
+cumulative R-profiled allocation rather than native or peak memory, and GNU
+`time -v` covers different whole-process bookkeeping between the R and Python
+drivers.
+
+```sh
+Rscript benchmarks/make_benchmark_fixtures.R \
+  --out /tmp/rzarrs-large-fixtures \
+  --rows 16384 --cols 16384 \
+  --chunk-rows 2048 --chunk-cols 2048 --overwrite
+rm -rf /tmp/rzarrs-large-fixtures/numeric-gzip.zarr
+
+R_LIBS_USER=/tmp/rzarrs-layout-lib-final \
+  benchmarks/run_rzarrs_rarr_bench.sh \
+  --fixtures /tmp/rzarrs-large-fixtures \
+  --out /tmp/rzarrs-large-results \
+  --cpuset 0 --numa-node 0 --mode warm --reps 5 --iterations 3
+
+benchmarks/run_zarrista_bench.sh \
+  --fixtures /tmp/rzarrs-large-fixtures \
+  --out /tmp/rzarrs-large-results \
+  --python /tmp/zarrista-venv/bin/python \
+  --zarrista-revision 92d26b65b90e9715d5c658c71b9216449f25ae64 \
+  --cpuset 0 --numa-node 0 --mode warm --reps 5 --iterations 3
+```
+
+## Artifact validation
+
+```{r read-results}
+required_fields <- c(
+  "implementation", "runtime", "runtime_version", "implementation_version",
+  "benchmark_engine", "benchmark_engine_version", "measurement_scope",
+  "startup_included", "mode", "store", "iterations_requested",
+  "iterations_completed", "min_s", "median_s", "mean_s", "total_s"
+)
+summary_paths <- list.files(
+  results_dir, pattern = "summary\\.csv$", recursive = TRUE, full.names = TRUE
+)
+stopifnot(length(summary_paths) == 15L)
+raw_runs <- lapply(summary_paths, utils::read.csv, stringsAsFactors = FALSE)
+stopifnot(all(vapply(
+  raw_runs,
+  function(run) nrow(run) == 1L && identical(names(run), required_fields),
+  logical(1L)
+)))
+runs <- do.call(rbind, raw_runs)
+runs$artifact <- substring(summary_paths, nchar(results_dir) + 2L)
+stopifnot(
+  !anyNA(runs),
+  !any(vapply(runs, function(column) any(trimws(as.character(column)) == ""),
+              logical(1L))),
+  identical(sort(unique(runs$implementation)), c("Rarr", "Rzarrs", "Zarrista")),
+  all(table(runs$implementation) == 5L),
+  identical(unique(runs$mode), "warm"),
+  all(runs$iterations_requested == 3L),
+  all(runs$iterations_completed == 3L),
+  all(tolower(as.character(runs$startup_included)) == "false")
+)
+
+manifest_paths <- file.path(dirname(summary_paths), "fixture.dcf")
+stopifnot(all(file.exists(manifest_paths)))
+manifests <- lapply(manifest_paths, read.dcf)
+stopifnot(all(vapply(
+  manifests,
+  function(manifest) {
+    identical(unname(manifest[1L, "shape"]), "16384x16384") &&
+      identical(unname(manifest[1L, "chunk_shape"]), "2048x2048") &&
+      identical(unname(manifest[1L, "chunk_count"]), "64") &&
+      identical(unname(manifest[1L, "logical_bytes"]), "1073741824") &&
+      identical(unname(manifest[1L, "codec"]), "bytes")
+  },
+  logical(1L)
+)))
+
+receipt_path <- file.path(results_dir, "fixture-receipt.txt")
+stopifnot(file.exists(receipt_path))
+receipt_lines <- readLines(receipt_path, warn = FALSE)
+stopifnot(
+  any(grepl("5a340f0358bd89df8759993cd9fd1bd04465fc27670c451217dc9291b0109127", receipt_lines, fixed = TRUE)),
+  any(grepl("9e8c74b4d569351e07daf7d1787b6fff3d08f692bfbc7d2262ca0005d81af9c8", receipt_lines, fixed = TRUE))
+)
+
+environment_paths <- list.files(
+  results_dir, pattern = "^environment\\.txt$", recursive = TRUE,
+  full.names = TRUE
+)
+stopifnot(length(environment_paths) == 2L)
+clean_receipt <- function(path) {
+  lines <- readLines(path, warn = FALSE)
+  status <- match("source_status:", lines)
+  revision <- sub("^source_revision: *", "", grep(
+    "^source_revision:", lines, value = TRUE
+  ))
+  stopifnot(
+    length(revision) == 1L,
+    nzchar(revision),
+    !is.na(status),
+    status < length(lines),
+    startsWith(lines[[status + 1L]], "date_utc:")
+  )
+  revision
+}
+revisions <- vapply(environment_paths, clean_receipt, character(1L))
+```
+
+```{r receipts}
+receipt_table <- data.frame(
+  receipt = substring(environment_paths, nchar(results_dir) + 2L),
+  clean_source_revision = revisions
+)
+knitr::kable(receipt_table, row.names = FALSE)
+```
+
+## Results
+
+The per-process values below are medians of three timed iterations. Showing all
+five values makes process-level variation visible without dumping raw benchmark
+objects.
+
+```{r process-results}
+process_results <- runs[c("implementation", "median_s", "artifact")]
+process_results$replicate <- sub(".*rep-([0-9]+)/summary\\.csv$", "\\1",
+                                 process_results$artifact)
+process_results <- process_results[c("implementation", "replicate", "median_s")]
+process_results <- process_results[order(
+  process_results$implementation, as.integer(process_results$replicate)
+), ]
+process_results$median_s <- signif(process_results$median_s, 7L)
+knitr::kable(process_results, row.names = FALSE)
+```
+
+```{r aggregate-results}
+reported <- stats::aggregate(
+  runs$median_s,
+  by = list(implementation = runs$implementation),
+  FUN = function(value) c(
+    min_s = min(value), median_s = stats::median(value), max_s = max(value)
+  )
+)
+reported <- data.frame(
+  implementation = reported$implementation,
+  min_s = reported$x[, "min_s"],
+  median_s = reported$x[, "median_s"],
+  max_s = reported$x[, "max_s"]
+)
+reported$throughput_mib_s <- 1024 / reported$median_s
+for (field in c("min_s", "median_s", "max_s", "throughput_mib_s")) {
+  reported[[field]] <- signif(reported[[field]], 6L)
+}
+knitr::kable(reported, row.names = FALSE)
+```
+
+```{r ratios}
+medians <- stats::setNames(reported$median_s, reported$implementation)
+ratios <- data.frame(
+  comparison = c("Zarrista over Rzarrs", "Rzarrs over Rarr"),
+  speedup = c(
+    medians[["Rzarrs"]] / medians[["Zarrista"]],
+    medians[["Rarr"]] / medians[["Rzarrs"]]
+  )
+)
+ratios$speedup <- signif(ratios$speedup, 6L)
+knitr::kable(ratios, row.names = FALSE)
+```
+
+The 1 GiB medians are approximately 0.432 seconds for Zarrista, 1.832 seconds
+for Rzarrs, and 3.614 seconds for Rarr. Zarrista remains about 4.25 times faster
+than Rzarrs, while Rzarrs is about 1.97 times faster than Rarr. The persistence
+of the gap after a 16-fold payload increase argues against a small fixed
+R/Python wrapper cost as the dominant explanation. It does **not** prove that
+column-major transposition alone accounts for the difference; retrieval,
+ownership, allocation/page-fault behavior, conversion, and unmatched build
+configuration still need stage-level evidence.
