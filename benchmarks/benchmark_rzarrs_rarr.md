@@ -273,18 +273,18 @@ knitr::kable(reported, row.names = FALSE)
 
 | mode | fixture                   | codec         | implementation | runtime | median_s |   mean_s | throughput_mib_s | max_rss_mib | cpu_percent |
 |:-----|:--------------------------|:--------------|:---------------|:--------|---------:|---------:|-----------------:|------------:|------------:|
-| cold | numeric-uncompressed.zarr | bytes         | Zarrista       | Python  | 0.194430 | 0.194430 |           329.17 |      105.73 |          51 |
-| warm | numeric-uncompressed.zarr | bytes         | Zarrista       | Python  | 0.024569 | 0.024664 |          2604.90 |      106.41 |          99 |
-| cold | numeric-gzip.zarr         | gzip(level=1) | Zarrista       | Python  | 0.262680 | 0.262680 |           243.65 |      106.52 |          74 |
-| warm | numeric-gzip.zarr         | gzip(level=1) | Zarrista       | Python  | 0.164380 | 0.164190 |           389.33 |      107.26 |          99 |
-| cold | numeric-uncompressed.zarr | bytes         | Rarr           | R       | 0.268000 | 0.268000 |           238.81 |      244.01 |          79 |
-| warm | numeric-uncompressed.zarr | bytes         | Rarr           | R       | 0.143490 | 0.158530 |           446.03 |      435.61 |          99 |
-| cold | numeric-gzip.zarr         | gzip(level=1) | Rarr           | R       | 0.346000 | 0.346000 |           184.97 |      244.79 |          82 |
-| warm | numeric-gzip.zarr         | gzip(level=1) | Rarr           | R       | 0.272300 | 0.272450 |           235.03 |      438.53 |          99 |
-| cold | numeric-uncompressed.zarr | bytes         | Rzarrs         | R       | 0.234000 | 0.234000 |           273.50 |      224.53 |          71 |
-| warm | numeric-uncompressed.zarr | bytes         | Rzarrs         | R       | 0.111170 | 0.120100 |           575.71 |      442.86 |          99 |
-| cold | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         | R       | 0.296000 | 0.296000 |           216.22 |      225.28 |          80 |
-| warm | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         | R       | 0.234640 | 0.242720 |           272.76 |      443.62 |          99 |
+| cold | numeric-uncompressed.zarr | bytes         | Zarrista       | Python  | 0.196090 | 0.196090 |           326.39 |      105.88 |          52 |
+| warm | numeric-uncompressed.zarr | bytes         | Zarrista       | Python  | 0.024632 | 0.024751 |          2598.30 |      106.41 |          99 |
+| cold | numeric-gzip.zarr         | gzip(level=1) | Zarrista       | Python  | 0.261800 | 0.261800 |           244.46 |      106.68 |          73 |
+| warm | numeric-gzip.zarr         | gzip(level=1) | Zarrista       | Python  | 0.163050 | 0.163370 |           392.53 |      107.39 |          99 |
+| cold | numeric-uncompressed.zarr | bytes         | Rarr           | R       | 0.268000 | 0.268000 |           238.81 |      244.01 |          78 |
+| warm | numeric-uncompressed.zarr | bytes         | Rarr           | R       | 0.143190 | 0.157870 |           446.96 |      435.50 |          99 |
+| cold | numeric-gzip.zarr         | gzip(level=1) | Rarr           | R       | 0.344000 | 0.344000 |           186.05 |      244.79 |          82 |
+| warm | numeric-gzip.zarr         | gzip(level=1) | Rarr           | R       | 0.271910 | 0.273490 |           235.38 |      438.52 |          99 |
+| cold | numeric-uncompressed.zarr | bytes         | Rzarrs         | R       | 0.200000 | 0.200000 |           320.00 |      224.38 |          70 |
+| warm | numeric-uncompressed.zarr | bytes         | Rzarrs         | R       | 0.078245 | 0.086614 |           817.95 |      442.71 |          99 |
+| cold | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         | R       | 0.260000 | 0.260000 |           246.15 |      225.29 |          79 |
+| warm | numeric-gzip.zarr         | gzip(level=1) | Rzarrs         | R       | 0.203340 | 0.211080 |           314.74 |      443.77 |          99 |
 
 Cumulative R-profiled allocation and R garbage-collection counts are
 runtime-specific diagnostics, so they are reported separately rather
@@ -345,10 +345,10 @@ knitr::kable(wide, row.names = FALSE)
 
 | mode | fixture                   | codec         | median_s.Rarr | median_s.Rzarrs | rzarrs_speedup_over_rarr |
 |:-----|:--------------------------|:--------------|--------------:|----------------:|-------------------------:|
-| cold | numeric-uncompressed.zarr | bytes         |     0.2680000 |       0.2340000 |                   1.1453 |
-| warm | numeric-uncompressed.zarr | bytes         |     0.1434875 |       0.1111669 |                   1.2907 |
-| cold | numeric-gzip.zarr         | gzip(level=1) |     0.3460000 |       0.2960000 |                   1.1689 |
-| warm | numeric-gzip.zarr         | gzip(level=1) |     0.2723028 |       0.2346424 |                   1.1605 |
+| cold | numeric-uncompressed.zarr | bytes         |     0.2680000 |       0.2000000 |                   1.3400 |
+| warm | numeric-uncompressed.zarr | bytes         |     0.1431883 |       0.0782447 |                   1.8300 |
+| cold | numeric-gzip.zarr         | gzip(level=1) |     0.3440000 |       0.2600000 |                   1.3231 |
+| warm | numeric-gzip.zarr         | gzip(level=1) |     0.2719058 |       0.2033398 |                   1.3372 |
 
 ## Zarrista context baseline
 

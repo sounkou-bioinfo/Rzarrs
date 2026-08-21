@@ -204,11 +204,91 @@ ratios$speedup <- signif(ratios$speedup, 6L)
 knitr::kable(ratios, row.names = FALSE)
 ```
 
-The 1 GiB medians are approximately 0.432 seconds for Zarrista, 1.832 seconds
-for Rzarrs, and 3.614 seconds for Rarr. Zarrista remains about 4.25 times faster
-than Rzarrs, while Rzarrs is about 1.97 times faster than Rarr. The persistence
-of the gap after a 16-fold payload increase argues against a small fixed
-R/Python wrapper cost as the dominant explanation. It does **not** prove that
-column-major transposition alone accounts for the difference; retrieval,
-ownership, allocation/page-fault behavior, conversion, and unmatched build
-configuration still need stage-level evidence.
+The 1 GiB medians are approximately `r sprintf("%.3f", medians[["Zarrista"]])`
+seconds for Zarrista, `r sprintf("%.3f", medians[["Rzarrs"]])` seconds for
+Rzarrs, and `r sprintf("%.3f", medians[["Rarr"]])` seconds for Rarr. Zarrista
+is about `r sprintf("%.2f", ratios$speedup[[1L]])` times faster than Rzarrs,
+while Rzarrs is about `r sprintf("%.2f", ratios$speedup[[2L]])` times faster
+than Rarr. The persistence of the gap after a 16-fold payload increase argues
+against a small fixed R/Python wrapper cost as the dominant explanation. It
+does **not** prove that column-major transposition alone accounts for the
+difference; retrieval, ownership, allocation/page-fault behavior, conversion,
+and unmatched build configuration still need stage-level evidence.
+
+## Native profile
+
+The committed profile drivers open the array once, perform one warm
+materialization, and then perform three more full materializations. `perf stat`
+repeated that whole process three times; `perf record` sampled a separate run
+at 499 Hz using user-space cycles. These counters include runtime startup and
+array open, so they support before/after diagnosis rather than replacing the
+timing table above.
+
+```sh
+perf record -F 499 -e cycles:u --call-graph fp -- \
+  Rscript benchmarks/profile_large_rzarrs.R \
+  --store /tmp/rzarrs-large-fixtures/numeric-uncompressed.zarr
+
+perf record -F 499 -e cycles:u --call-graph fp -- \
+  "$ZARRISTA_PYTHON" benchmarks/profile_large_zarrista.py \
+  --store /tmp/rzarrs-large-fixtures/numeric-uncompressed.zarr
+```
+
+```{r profile-results}
+profile_path <- "benchmark_large_payload_profile.csv"
+stopifnot(file.exists(profile_path))
+profile <- utils::read.csv(profile_path, stringsAsFactors = FALSE)
+profile_fields <- c(
+  "implementation", "mapper_variant", "source_revision",
+  "native_artifact_sha256", "profile_scope", "task_clock_ms", "cycles",
+  "instructions", "branches", "branch_misses", "cache_references",
+  "cache_misses", "minor_faults", "major_faults", "top_resolved_symbol",
+  "top_resolved_self_percent"
+)
+stopifnot(
+  identical(names(profile), profile_fields),
+  nrow(profile) == 3L,
+  !anyNA(profile),
+  !any(vapply(profile, function(column) {
+    any(trimws(as.character(column)) == "")
+  }, logical(1L))),
+  identical(profile$implementation, c("Rzarrs", "Rzarrs", "Zarrista"))
+)
+profile_report <- profile[c(
+  "implementation", "mapper_variant", "task_clock_ms", "cycles",
+  "instructions", "cache_references", "cache_misses",
+  "top_resolved_symbol", "top_resolved_self_percent"
+)]
+knitr::kable(profile_report, row.names = FALSE)
+```
+
+```{r profile-change}
+before <- profile[profile$mapper_variant == "source-contiguous 32x32", ]
+after <- profile[profile$mapper_variant == "destination-contiguous 32x32", ]
+stopifnot(nrow(before) == 1L, nrow(after) == 1L)
+fields <- c(
+  "task_clock_ms", "cycles", "instructions", "branches", "branch_misses",
+  "cache_references", "cache_misses", "minor_faults"
+)
+profile_change <- data.frame(
+  metric = fields,
+  before = as.numeric(before[1L, fields]),
+  after = as.numeric(after[1L, fields])
+)
+profile_change$reduction_percent <- signif(
+  100 * (profile_change$before - profile_change$after) /
+    profile_change$before,
+  5L
+)
+knitr::kable(profile_change, row.names = FALSE)
+```
+
+Changing only the inner-loop orientation reduced task-clock by about 27%,
+cycles by about 50%, and observed cache misses by about 41%, while instructions
+and minor faults were essentially unchanged. This is direct evidence that
+write locality—not fewer conversion instructions or delayed finalization—caused
+the improvement. The mapper's leading resolved self-cycle share fell from
+71.33% to 42.53%. It is still the largest resolved Rzarrs hotspot; Zarrista's
+leading resolved symbol is `memmove` at 60.81%, and no explicit `to_numpy`
+hotspot appears in the sampled output. Symbol percentages exclude a substantial
+unresolved call-chain share and must not be treated as exact wall-time stages.
