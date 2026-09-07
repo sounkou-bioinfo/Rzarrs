@@ -1,4 +1,5 @@
 TARGET = @TARGET@
+TARGET_UNDERSCORED = $(subst -,_,$(TARGET))
 
 PROFILE = @PROFILE@
 FEATURE_FLAGS = @FEATURE_FLAGS@
@@ -30,11 +31,13 @@ $(STATLIB):
 	# in actual, but we need this tweak to please the compiler.
 	mkdir -p $(LIBDIR)/libgcc_mock && touch $(LIBDIR)/libgcc_mock/libgcc_eh.a
 
+	# Keep Rtools settings away from native MSVC build dependencies on Windows ARM.
 	export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="$(CARGO_LINKER)" && \
 	  export CARGO_TARGET_AARCH64_PC_WINDOWS_GNULLVM_LINKER="$(CARGO_LINKER)" && \
 	  export LIBRARY_PATH="$${LIBRARY_PATH};$(LIBDIR)/libgcc_mock" && \
-	  export CC="$(CC)" && \
-	  export CFLAGS="$(CFLAGS)" && \
+	  unset CC CFLAGS && \
+	  export CC_$(TARGET_UNDERSCORED)="$(CC)" && \
+	  export CFLAGS_$(TARGET_UNDERSCORED)="$(CFLAGS)" && \
 	  export RUSTFLAGS="$(RUSTFLAGS)" && \
 	  cargo build --target $(TARGET) --lib --profile $(PROFILE) $(FEATURE_FLAGS) --manifest-path ./rust/Cargo.toml --target-dir $(TARGET_DIR) $(CARGO_VENDOR_ARGS)
 
